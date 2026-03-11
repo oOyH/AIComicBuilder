@@ -124,6 +124,10 @@ src/
 - **Dialogue** — 对白（角色、文本、音频）
 - **Task** — 后台任务队列
 
+## Demo
+
+<video src="https://ladr-1258957911.cos.ap-guangzhou.myqcloud.com/jadeai/demo1.mp4" controls width="100%"></video>
+
 ## License
 
-MIT
+[Apache License 2.0](./LICENSE)
