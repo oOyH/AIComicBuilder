@@ -21,8 +21,10 @@ CREATE TABLE `dialogues` (
 CREATE TABLE `projects` (
 	`id` text PRIMARY KEY NOT NULL,
 	`title` text NOT NULL,
+	`idea` text DEFAULT '',
 	`script` text DEFAULT '',
 	`status` text DEFAULT 'draft' NOT NULL,
+	`final_video_url` text,
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
@@ -32,6 +34,10 @@ CREATE TABLE `shots` (
 	`project_id` text NOT NULL,
 	`sequence` integer NOT NULL,
 	`prompt` text DEFAULT '',
+	`start_frame_desc` text,
+	`end_frame_desc` text,
+	`motion_script` text,
+	`camera_direction` text DEFAULT 'static',
 	`duration` integer DEFAULT 10 NOT NULL,
 	`first_frame` text,
 	`last_frame` text,

@@ -12,14 +12,10 @@ export function initializeProviders() {
     setDefaultAIProvider(new OpenAIProvider());
   } else if (process.env.GEMINI_API_KEY) {
     setDefaultAIProvider(new GeminiProvider());
-  } else {
-    console.warn("[AI] No AI provider API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY.");
   }
 
   if (process.env.SEEDANCE_API_KEY) {
     setDefaultVideoProvider(new SeedanceProvider());
-  } else {
-    console.warn("[AI] No Seedance API key configured. Video generation will not work.");
   }
 
   initialized = true;

@@ -67,6 +67,7 @@ docker run -d \
   -p 3000:3000 \
   -v ./data:/app/data \
   -v ./uploads:/app/uploads \
+  --platform linux/amd64 \
   twwch/aicomicbuilder:latest
 ```
 

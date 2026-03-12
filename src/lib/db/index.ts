@@ -35,6 +35,12 @@ function createDb(): DrizzleDB {
   return instance;
 }
 
+export function runMigrations() {
+  const { migrate } = require("drizzle-orm/better-sqlite3/migrator");
+  const migrationsFolder = path.resolve("drizzle");
+  migrate(createDb(), { migrationsFolder });
+}
+
 // Proxy preserves the `db` export API — lazy-inits on first property access
 export const db: DrizzleDB = new Proxy({} as DrizzleDB, {
   get(_, prop) {

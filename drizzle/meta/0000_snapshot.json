@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6b898aa6-a40d-4b48-a336-b42cc36a85cb",
+  "id": "0c0310f2-23ad-401f-972a-e75a871d3962",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "characters": {
@@ -161,6 +161,14 @@
           "notNull": true,
           "autoincrement": false
         },
+        "idea": {
+          "name": "idea",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "''"
+        },
         "script": {
           "name": "script",
           "type": "text",
@@ -176,6 +184,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'draft'"
+        },
+        "final_video_url": {
+          "name": "final_video_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "created_at": {
           "name": "created_at",
@@ -229,6 +244,35 @@
           "notNull": false,
           "autoincrement": false,
           "default": "''"
+        },
+        "start_frame_desc": {
+          "name": "start_frame_desc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_frame_desc": {
+          "name": "end_frame_desc",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "motion_script": {
+          "name": "motion_script",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "camera_direction": {
+          "name": "camera_direction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'static'"
         },
         "duration": {
           "name": "duration",
