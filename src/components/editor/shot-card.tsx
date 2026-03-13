@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { useModelStore } from "@/stores/model-store";
 import { InlineModelPicker } from "@/components/editor/model-selector";
+import { useModelGuard } from "@/hooks/use-model-guard";
 import { VideoRatioPicker } from "@/components/editor/video-ratio-picker";
 import { apiFetch } from "@/lib/api-fetch";
 import {
@@ -82,6 +83,8 @@ export function ShotCard({
   const [expanded, setExpanded] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [videoRatio, setVideoRatio] = useState("16:9");
+  const imageGuard = useModelGuard("image");
+  const videoGuard = useModelGuard("video");
   const variant = statusVariant[status] || "outline";
 
   async function patchShot(fields: Record<string, unknown>) {
@@ -98,6 +101,7 @@ export function ShotCard({
   }
 
   async function handleGenerateFrames() {
+    if (!imageGuard()) return;
     setGeneratingFrames(true);
     try {
       await apiFetch(`/api/projects/${projectId}/generate`, {
@@ -117,6 +121,7 @@ export function ShotCard({
   }
 
   async function handleGenerateVideo() {
+    if (!videoGuard()) return;
     setGeneratingVideo(true);
     try {
       await apiFetch(`/api/projects/${projectId}/generate`, {
