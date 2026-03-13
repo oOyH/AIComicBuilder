@@ -2,6 +2,8 @@ import { OpenAIProvider } from "./providers/openai";
 import { GeminiProvider } from "./providers/gemini";
 import { SeedanceProvider } from "./providers/seedance";
 import { VeoProvider } from "./providers/veo";
+import { KlingImageProvider } from "./providers/kling-image";
+import { KlingVideoProvider } from "./providers/kling-video";
 import { getAIProvider, getVideoProvider } from "./index";
 import type { AIProvider, VideoProvider } from "./types";
 
@@ -32,6 +34,12 @@ export function createAIProvider(config: ProviderConfig): AIProvider {
         baseUrl: config.baseUrl,
         model: config.modelId,
       });
+    case "kling":
+      return new KlingImageProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+      });
     default:
       throw new Error(`Unsupported AI protocol: ${config.protocol}`);
   }
@@ -47,6 +55,12 @@ export function createVideoProvider(config: ProviderConfig): VideoProvider {
       });
     case "gemini":
       return new VeoProvider({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.modelId,
+      });
+    case "kling":
+      return new KlingVideoProvider({
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         model: config.modelId,
