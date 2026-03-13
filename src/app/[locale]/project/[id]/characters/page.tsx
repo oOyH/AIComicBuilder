@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { Users, Sparkles, ImageIcon, Loader2 } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { apiFetch } from "@/lib/api-fetch";
+import { useModelGuard } from "@/hooks/use-model-guard";
 
 export default function CharactersPage() {
   const t = useTranslations();
@@ -16,6 +17,8 @@ export default function CharactersPage() {
   const getModelConfig = useModelStore((s) => s.getModelConfig);
   const [extracting, setExtracting] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
+  const textGuard = useModelGuard("text");
+  const imageGuard = useModelGuard("image");
 
   if (!project) return null;
 
@@ -25,6 +28,7 @@ export default function CharactersPage() {
 
   async function handleExtractCharacters() {
     if (!project) return;
+    if (!textGuard()) return;
     setExtracting(true);
 
     try {
@@ -54,6 +58,7 @@ export default function CharactersPage() {
 
   async function handleBatchGenerateImages() {
     if (!project) return;
+    if (!imageGuard()) return;
     setGeneratingImages(true);
 
     try {
