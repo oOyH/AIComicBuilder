@@ -74,46 +74,105 @@ export class KlingVideoProvider implements VideoProvider {
 
   async generateVideo(params: VideoGenerateParams): Promise<string> {
     const duration = params.duration <= 5 ? 5 : 10;
-    const aspectRatio = params.ratio ?? "16:9";
-    const imageData = toBase64(params.firstFrame);
-    const tailImageData = toBase64(params.lastFrame);
+    const aspectRatio = params.ratio;
 
-    console.log(
-      `[Kling Video] Submitting: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`
-    );
+    let taskId: string;
 
-    const submitRes = await fetch(`${this.baseUrl}/v1/videos/image2video`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: this.getAuthHeader(),
-      },
-      body: JSON.stringify({
-        model: this.model,
-        prompt: params.prompt,
-        image: imageData,
-        tail_image: tailImageData,
-        duration,
-        aspect_ratio: aspectRatio,
-        sound: "on",
-      }),
-    });
+    if ("firstFrame" in params) {
+      // ── Keyframe mode: image2video ──
+      const kp = params as { firstFrame: string; lastFrame: string };
+      const imageData = toBase64(kp.firstFrame);
+      const tailImageData = toBase64(kp.lastFrame);
 
-    if (!submitRes.ok) {
-      const errBody = await submitRes.text().catch(() => "");
-      console.error(`[Kling Video] Submit 401 body: ${errBody}`);
-      throw new Error(`Kling video submit failed: ${submitRes.status} ${errBody}`);
+      console.log(
+        `[Kling Video] image2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}`
+      );
+
+      const submitRes = await fetch(`${this.baseUrl}/v1/videos/image2video`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: this.getAuthHeader(),
+        },
+        body: JSON.stringify({
+          model: this.model,
+          prompt: params.prompt,
+          image: imageData,
+          tail_image: tailImageData,
+          duration,
+          aspect_ratio: aspectRatio,
+          sound: "on",
+        }),
+      });
+
+      if (!submitRes.ok) {
+        const errBody = await submitRes.text().catch(() => "");
+        throw new Error(`Kling image2video submit failed: ${submitRes.status} ${errBody}`);
+      }
+
+      const submitJson = (await submitRes.json()) as KlingResponse<{ task_id: string }>;
+      if (submitJson.code !== 0) {
+        throw new Error(`Kling image2video error: ${submitJson.message}`);
+      }
+      taskId = submitJson.data.task_id;
+      console.log(`[Kling Video] image2video task submitted: ${taskId}`);
+
+    } else {
+      // ── Reference image mode: text2video ──
+      const refImages = params.charRefImages.map((p) => toBase64(p));
+
+      console.log(
+        `[Kling Video] text2video: model=${this.model}, duration=${duration}s, ratio=${aspectRatio}, refs=${refImages.length}`
+      );
+
+      let submitRes = await fetch(`${this.baseUrl}/v1/videos/text2video`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: this.getAuthHeader(),
+        },
+        body: JSON.stringify({
+          model: this.model,
+          prompt: params.prompt,
+          reference_image: refImages,
+          duration,
+          aspect_ratio: aspectRatio,
+        }),
+      });
+
+      // Fallback: if reference_image is unsupported (400/422), retry without it
+      if (submitRes.status === 400 || submitRes.status === 422) {
+        console.warn(`[Kling Video] text2video reference_image rejected (${submitRes.status}), retrying without ref images`);
+        submitRes = await fetch(`${this.baseUrl}/v1/videos/text2video`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: this.getAuthHeader(),
+          },
+          body: JSON.stringify({
+            model: this.model,
+            prompt: params.prompt,
+            duration,
+            aspect_ratio: aspectRatio,
+          }),
+        });
+      }
+
+      if (!submitRes.ok) {
+        const errBody = await submitRes.text().catch(() => "");
+        throw new Error(`Kling text2video submit failed: ${submitRes.status} ${errBody}`);
+      }
+
+      const submitJson = (await submitRes.json()) as KlingResponse<{ task_id: string }>;
+      if (submitJson.code !== 0) {
+        throw new Error(`Kling text2video error: ${submitJson.message}`);
+      }
+      taskId = submitJson.data.task_id;
+      console.log(`[Kling Video] text2video task submitted: ${taskId}`);
     }
 
-    const submitJson = (await submitRes.json()) as KlingResponse<{ task_id: string }>;
-    if (submitJson.code !== 0) {
-      throw new Error(`Kling video error: ${submitJson.message}`);
-    }
-
-    const taskId = submitJson.data.task_id;
-    console.log(`[Kling Video] Task submitted: ${taskId}`);
-
-    const videoUrl = await this.pollForResult(taskId);
+    const taskType = "firstFrame" in params ? "image2video" : "text2video";
+    const videoUrl = await this.pollForResult(taskId, taskType);
 
     // Download video
     const videoRes = await fetch(videoUrl);
@@ -128,15 +187,19 @@ export class KlingVideoProvider implements VideoProvider {
     return filepath;
   }
 
-  private async pollForResult(taskId: string): Promise<string> {
+  private async pollForResult(
+    taskId: string,
+    taskType: "image2video" | "text2video"
+  ): Promise<string> {
     const maxAttempts = 120;
 
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((resolve) => setTimeout(resolve, 5_000));
 
-      const res = await fetch(`${this.baseUrl}/v1/videos/image2video/${taskId}`, {
-        headers: { Authorization: this.getAuthHeader() },
-      });
+      const res = await fetch(
+        `${this.baseUrl}/v1/videos/${taskType}/${taskId}`,
+        { headers: { Authorization: this.getAuthHeader() } }
+      );
 
       if (!res.ok) {
         throw new Error(`Kling video poll failed: ${res.status}`);
