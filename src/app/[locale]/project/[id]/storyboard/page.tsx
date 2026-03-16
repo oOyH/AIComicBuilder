@@ -478,7 +478,15 @@ export default function StoryboardPage() {
               firstFrame={shot.firstFrame}
               lastFrame={shot.lastFrame}
               videoUrl={generationMode === "reference" ? shot.referenceVideoUrl : shot.videoUrl}
-              status={shot.status}
+              status={
+                generationMode === "reference"
+                  ? shot.status === "generating"
+                    ? "generating"
+                    : shot.referenceVideoUrl
+                      ? "completed"
+                      : "pending"
+                  : shot.status
+              }
               dialogues={shot.dialogues || []}
               onUpdate={() => fetchProject(project.id)}
               batchGeneratingFrames={generatingFrames}
