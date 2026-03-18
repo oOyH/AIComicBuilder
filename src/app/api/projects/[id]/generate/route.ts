@@ -859,16 +859,15 @@ async function handleSingleVideoGenerate(
 
     const ratio = (payload?.ratio as string) || "16:9";
 
-    const videoPrompt = shot.motionScript
-      ? buildVideoPrompt({
-          sceneDescription: shot.prompt || "",
-          motionScript: shot.motionScript,
-          cameraDirection: shot.cameraDirection || "static",
-          duration: shot.duration ?? 10,
-          characterDescriptions,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-        })
-      : shot.prompt || "";
+    const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+    const videoPrompt = buildVideoPrompt({
+      videoScript,
+      cameraDirection: shot.cameraDirection || "static",
+      startFrameDesc: shot.startFrameDesc ?? undefined,
+      endFrameDesc: shot.endFrameDesc ?? undefined,
+      duration: shot.duration ?? 10,
+      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+    });
 
     const result = await videoProvider.generateVideo({
       firstFrame: shot.firstFrame,
@@ -945,16 +944,15 @@ async function handleBatchVideoGenerate(
         text: d.text,
       }));
 
-      const videoPrompt = shot.motionScript
-        ? buildVideoPrompt({
-            sceneDescription: shot.prompt || "",
-            motionScript: shot.motionScript,
-            cameraDirection: shot.cameraDirection || "static",
-            duration: shot.duration ?? 10,
-            characterDescriptions,
-            dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-          })
-        : shot.prompt || "";
+      const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+      const videoPrompt = buildVideoPrompt({
+        videoScript,
+        cameraDirection: shot.cameraDirection || "static",
+        startFrameDesc: shot.startFrameDesc ?? undefined,
+        endFrameDesc: shot.endFrameDesc ?? undefined,
+        duration: shot.duration ?? 10,
+        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      });
 
       const result = await videoProvider.generateVideo({
         firstFrame: shot.firstFrame!,
@@ -1242,16 +1240,15 @@ async function handleSingleReferenceVideo(
     // Step 2: Generate video using scene frame as initial image
     const videoProvider = resolveVideoProvider(modelConfig);
 
-    const videoPrompt = shot.motionScript
-      ? buildVideoPrompt({
-          sceneDescription: shot.prompt || "",
-          motionScript: shot.motionScript,
-          cameraDirection: shot.cameraDirection || "static",
-          duration: shot.duration ?? 10,
-          characterDescriptions,
-          dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-        })
-      : shot.prompt || "";
+    const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+    const videoPrompt = buildVideoPrompt({
+      videoScript,
+      cameraDirection: shot.cameraDirection || "static",
+      startFrameDesc: shot.startFrameDesc ?? undefined,
+      endFrameDesc: shot.endFrameDesc ?? undefined,
+      duration: shot.duration ?? 10,
+      dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+    });
 
     console.log(`[SingleReferenceVideo] Shot ${shot.sequence}: generating video from scene frame`);
 
@@ -1384,16 +1381,15 @@ async function handleBatchReferenceVideo(
       await db.update(shots).set({ sceneRefFrame: sceneFramePath }).where(eq(shots.id, shot.id));
 
       // Step 2: Generate video using scene frame as initial image
-      const videoPrompt = shot.motionScript
-        ? buildVideoPrompt({
-            sceneDescription: shot.prompt || "",
-            motionScript: shot.motionScript,
-            cameraDirection: shot.cameraDirection || "static",
-            duration: shot.duration ?? 10,
-            characterDescriptions,
-            dialogues: dialogueList.length > 0 ? dialogueList : undefined,
-          })
-        : shot.prompt || "";
+      const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+      const videoPrompt = buildVideoPrompt({
+        videoScript,
+        cameraDirection: shot.cameraDirection || "static",
+        startFrameDesc: shot.startFrameDesc ?? undefined,
+        endFrameDesc: shot.endFrameDesc ?? undefined,
+        duration: shot.duration ?? 10,
+        dialogues: dialogueList.length > 0 ? dialogueList : undefined,
+      });
 
       console.log(`[BatchReferenceVideo] Shot ${shot.sequence}: generating video from scene frame`);
 

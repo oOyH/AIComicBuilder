@@ -91,6 +91,8 @@ export default function StoryboardPage() {
   const [generating, setGenerating] = useState(false);
   const [generatingFrames, setGeneratingFrames] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
+  const [generatingSceneFrames, setGeneratingSceneFrames] = useState(false);
+  const [sceneFramesOverwrite, setSceneFramesOverwrite] = useState(false);
   const [videoRatio, setVideoRatio] = useState("16:9");
   const textGuard = useModelGuard("text");
   const imageGuard = useModelGuard("image");
@@ -142,7 +144,7 @@ export default function StoryboardPage() {
               ? "active"
               : "pending";
 
-  const anyGenerating = generating || generatingFrames || generatingVideos;
+  const anyGenerating = generating || generatingFrames || generatingVideos || generatingSceneFrames;
 
   async function handleGenerateShots() {
     if (!project) return;
@@ -227,6 +229,36 @@ export default function StoryboardPage() {
     }
 
     setGeneratingVideos(false);
+    fetchProject(project.id);
+  }
+
+  async function handleBatchGenerateSceneFrames(overwrite = false) {
+    if (!project) return;
+    if (!imageGuard()) return;
+    setSceneFramesOverwrite(overwrite);
+    setGeneratingSceneFrames(true);
+
+    try {
+      const response = await apiFetch(`/api/projects/${project.id}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "batch_scene_frame",
+          payload: { overwrite },
+          modelConfig: getModelConfig(),
+        }),
+      });
+      const data = await response.json() as { results: Array<{ status: string }> };
+      if (data.results?.some((r) => r.status === "error")) {
+        toast.warning(t("common.batchPartialFailed"));
+      }
+    } catch (err) {
+      console.error("Batch scene frame error:", err);
+      toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+    }
+
+    setGeneratingSceneFrames(false);
+    setSceneFramesOverwrite(false);
     fetchProject(project.id);
   }
 
@@ -416,6 +448,43 @@ export default function StoryboardPage() {
             </>
           )}
 
+          {/* Step 2b: Batch generate scene frames — reference mode only */}
+          {generationMode === "reference" && totalShots > 0 && hasReferenceImages && (
+            <>
+              <InlineModelPicker capability="image" />
+              <Button
+                onClick={() => handleBatchGenerateSceneFrames(false)}
+                disabled={anyGenerating}
+                variant="outline"
+                size="sm"
+              >
+                {generatingSceneFrames ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="h-3.5 w-3.5" />
+                )}
+                {generatingSceneFrames
+                  ? t("common.generating")
+                  : t("project.batchGenerateSceneFrames")}
+              </Button>
+              <Button
+                onClick={() => handleBatchGenerateSceneFrames(true)}
+                disabled={anyGenerating}
+                variant="outline"
+                size="sm"
+              >
+                {generatingSceneFrames ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ImageIcon className="h-3.5 w-3.5" />
+                )}
+                {generatingSceneFrames
+                  ? t("common.generating")
+                  : t("project.batchGenerateSceneFramesOverwrite")}
+              </Button>
+            </>
+          )}
+
           {/* Step 3: Batch generate videos */}
           {totalShots > 0 &&
             (generationMode === "reference" ? hasReferenceImages : shotsWithFrames > 0) && (
@@ -472,6 +541,7 @@ export default function StoryboardPage() {
               prompt={shot.prompt}
               startFrameDesc={shot.startFrameDesc}
               endFrameDesc={shot.endFrameDesc}
+              videoScript={shot.videoScript}
               motionScript={shot.motionScript}
               cameraDirection={shot.cameraDirection}
               duration={shot.duration}
@@ -495,6 +565,8 @@ export default function StoryboardPage() {
               characterDescriptions={characterDescriptions}
               generationMode={generationMode}
               batchGeneratingReferenceVideo={generationMode === "reference" ? generatingVideos : undefined}
+              batchGeneratingSceneFrames={generationMode === "reference" ? generatingSceneFrames : undefined}
+              batchSceneFramesOverwrite={sceneFramesOverwrite}
             />
           ))}
         </div>

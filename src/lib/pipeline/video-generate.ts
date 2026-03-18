@@ -26,14 +26,14 @@ export async function handleVideoGenerate(task: Task) {
     .set({ status: "generating" })
     .where(eq(shots.id, payload.shotId));
 
-  const prompt = shot.motionScript
-    ? buildVideoPrompt({
-        sceneDescription: shot.prompt || "",
-        motionScript: shot.motionScript,
-        cameraDirection: shot.cameraDirection || "static",
-        duration: shot.duration ?? 10,
-      })
-    : shot.prompt || "";
+  const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
+  const prompt = buildVideoPrompt({
+    videoScript,
+    cameraDirection: shot.cameraDirection || "static",
+    startFrameDesc: shot.startFrameDesc ?? undefined,
+    endFrameDesc: shot.endFrameDesc ?? undefined,
+    duration: shot.duration ?? 10,
+  });
 
   const result = await videoProvider.generateVideo({
     firstFrame: shot.firstFrame,

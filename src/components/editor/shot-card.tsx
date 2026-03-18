@@ -40,6 +40,7 @@ interface ShotCardProps {
   prompt: string;
   startFrameDesc: string | null;
   endFrameDesc: string | null;
+  videoScript: string | null;
   motionScript: string | null;
   cameraDirection: string;
   duration: number;
@@ -55,6 +56,8 @@ interface ShotCardProps {
   characterDescriptions?: string;
   generationMode?: "keyframe" | "reference";
   batchGeneratingReferenceVideo?: boolean;
+  batchGeneratingSceneFrames?: boolean;
+  batchSceneFramesOverwrite?: boolean;
 }
 
 const statusVariant: Record<string, "outline" | "success" | "warning" | "destructive"> = {
@@ -72,6 +75,7 @@ export function ShotCard({
   prompt,
   startFrameDesc,
   endFrameDesc,
+  videoScript,
   motionScript,
   cameraDirection,
   duration,
@@ -87,6 +91,8 @@ export function ShotCard({
   characterDescriptions,
   generationMode = "keyframe",
   batchGeneratingReferenceVideo,
+  batchGeneratingSceneFrames,
+  batchSceneFramesOverwrite,
 }: ShotCardProps) {
   const t = useTranslations();
   const getModelConfig = useModelStore((s) => s.getModelConfig);
@@ -107,6 +113,7 @@ export function ShotCard({
   const imageGuard = useModelGuard("image");
   const videoGuard = useModelGuard("video");
   const isGeneratingFrames = generatingFrames || (!!batchGeneratingFrames && !firstFrame && !lastFrame);
+  const isGeneratingSceneFrame = generatingSceneFrame || (!!batchGeneratingSceneFrames && (batchSceneFramesOverwrite || !sceneRefFrame));
   const isGeneratingVideo =
     generatingVideo ||
     (!!batchGeneratingVideo && !!firstFrame && !!lastFrame && !videoUrl) ||
@@ -234,18 +241,17 @@ export function ShotCard({
 
   function handleCopyPrompt(e: React.MouseEvent) {
     e.stopPropagation();
-    const videoPrompt = motionScript
-      ? buildVideoPrompt({
-          sceneDescription: prompt,
-          motionScript,
-          cameraDirection,
-          duration: editDuration,
-          characterDescriptions,
-          dialogues: dialogues.length > 0
-            ? dialogues.map((d) => ({ characterName: d.characterName, text: d.text }))
-            : undefined,
-        })
-      : prompt;
+    const resolvedVideoScript = videoScript || motionScript || prompt || "";
+    const videoPrompt = buildVideoPrompt({
+      videoScript: resolvedVideoScript,
+      cameraDirection,
+      startFrameDesc: startFrameDesc ?? undefined,
+      endFrameDesc: endFrameDesc ?? undefined,
+      duration: editDuration,
+      dialogues: dialogues.length > 0
+        ? dialogues.map((d) => ({ characterName: d.characterName, text: d.text }))
+        : undefined,
+    });
     navigator.clipboard.writeText(videoPrompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -264,7 +270,7 @@ export function ShotCard({
         <div className="flex gap-1.5">
           {(generationMode === "reference"
             ? [
-                { src: sceneRefFrame, icon: ImageIcon, label: t("shot.firstFrame"), type: "image" as const },
+                { src: sceneRefFrame, icon: ImageIcon, label: t("shot.sceneRefFrame"), type: "image" as const },
                 { src: videoUrl, icon: VideoIcon, label: "Video", type: "video" as const },
               ]
             : [
@@ -347,19 +353,19 @@ export function ShotCard({
                     size="xs"
                     variant="outline"
                     onClick={(e) => { e.stopPropagation(); handleGenerateSceneFrame(); }}
-                    disabled={generatingSceneFrame || isGeneratingVideo}
+                    disabled={isGeneratingSceneFrame || isGeneratingVideo}
                   >
-                    {generatingSceneFrame ? (
+                    {isGeneratingSceneFrame ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <ImageIcon className="h-3 w-3" />
                     )}
-                    {generatingSceneFrame ? t("common.generating") : t("shot.firstFrame")}
+                    {isGeneratingSceneFrame ? t("common.generating") : t("shot.sceneRefFrame")}
                   </Button>
                   <Button
                     size="xs"
                     onClick={(e) => { e.stopPropagation(); handleGenerateReferenceVideo(); }}
-                    disabled={generatingSceneFrame || isGeneratingVideo}
+                    disabled={isGeneratingSceneFrame || isGeneratingVideo}
                   >
                     {isGeneratingVideo ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -552,14 +558,14 @@ export function ShotCard({
                   size="sm"
                   variant="outline"
                   onClick={handleGenerateSceneFrame}
-                  disabled={generatingSceneFrame || isGeneratingVideo || rewritingText}
+                  disabled={isGeneratingSceneFrame || isGeneratingVideo || rewritingText}
                 >
-                  {generatingSceneFrame ? (
+                  {isGeneratingSceneFrame ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
                     <ImageIcon className="h-3.5 w-3.5" />
                   )}
-                  {generatingSceneFrame ? t("common.generating") : t("shot.firstFrame")}
+                  {isGeneratingSceneFrame ? t("common.generating") : t("shot.sceneRefFrame")}
                 </Button>
               </>
             ) : (
