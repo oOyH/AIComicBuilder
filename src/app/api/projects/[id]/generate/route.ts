@@ -38,6 +38,16 @@ import { assembleVideo } from "@/lib/video/ffmpeg";
 
 export const maxDuration = 300;
 
+async function getVersionedUploadDir(versionId: string | null | undefined): Promise<string> {
+  if (!versionId) return process.env.UPLOAD_DIR || "./uploads";
+  const [version] = await db
+    .select({ label: storyboardVersions.label, projectId: storyboardVersions.projectId })
+    .from(storyboardVersions)
+    .where(eq(storyboardVersions.id, versionId));
+  if (!version) return process.env.UPLOAD_DIR || "./uploads";
+  return path.join(process.env.UPLOAD_DIR || "./uploads", "projects", version.projectId, version.label);
+}
+
 function extractErrorMessage(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   // Try to parse JSON error bodies (e.g. Google GenAI ApiError)
@@ -768,6 +778,8 @@ async function handleSingleFrameGenerate(
     return NextResponse.json({ error: "Shot not found" }, { status: 404 });
   }
 
+  const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
+
   const projectCharacters = await db
     .select()
     .from(characters)
@@ -781,22 +793,30 @@ async function handleSingleFrameGenerate(
     .map((c) => c.referenceImage)
     .filter(Boolean) as string[];
 
-  // Find previous shot's last frame for continuity
+  // Find previous shot's last frame for continuity — same version only
   const [previousShot] = await db
     .select()
     .from(shots)
-    .where(and(eq(shots.projectId, projectId), lt(shots.sequence, shot.sequence)))
+    .where(and(
+      eq(shots.projectId, projectId),
+      eq(shots.versionId, shot.versionId!),
+      lt(shots.sequence, shot.sequence)
+    ))
     .orderBy(desc(shots.sequence))
     .limit(1);
 
   const [nextShot] = await db
     .select()
     .from(shots)
-    .where(and(eq(shots.projectId, projectId), gt(shots.sequence, shot.sequence)))
+    .where(and(
+      eq(shots.projectId, projectId),
+      eq(shots.versionId, shot.versionId!),
+      gt(shots.sequence, shot.sequence)
+    ))
     .orderBy(asc(shots.sequence))
     .limit(1);
 
-  const ai = resolveImageProvider(modelConfig);
+  const ai = resolveImageProvider(modelConfig, versionedUploadDir);
 
   try {
     await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shotId));
@@ -871,6 +891,8 @@ async function handleSingleVideoGenerate(
     return NextResponse.json({ error: "Shot frames not generated yet" }, { status: 400 });
   }
 
+  const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
+
   const shotCharacters = await db
     .select()
     .from(characters)
@@ -889,7 +911,7 @@ async function handleSingleVideoGenerate(
     text: d.text,
   }));
 
-  const videoProvider = resolveVideoProvider(modelConfig);
+  const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
 
   try {
     await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shotId));
@@ -1041,6 +1063,8 @@ async function handleSingleSceneFrame(
     return NextResponse.json({ error: "Shot not found" }, { status: 404 });
   }
 
+  const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
+
   const projectCharacters = await db
     .select()
     .from(characters)
@@ -1065,7 +1089,7 @@ async function handleSingleSceneFrame(
   try {
     await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shotId));
 
-    const imageProvider = resolveImageProvider(modelConfig);
+    const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
     const sceneFramePrompt = buildSceneFramePrompt({
       sceneDescription: shot.prompt || "",
       charRefMapping,
@@ -1218,6 +1242,8 @@ async function handleSingleReferenceVideo(
     return NextResponse.json({ error: "Shot not found" }, { status: 404 });
   }
 
+  const versionedUploadDir = await getVersionedUploadDir(shot.versionId);
+
   const projectCharacters = await db
     .select()
     .from(characters)
@@ -1260,7 +1286,7 @@ async function handleSingleReferenceVideo(
     // Step 1: Reuse existing scene ref frame, or generate a new one (Toonflow-style)
     let sceneFramePath = shot.sceneRefFrame ?? null;
     if (!sceneFramePath) {
-      const imageProvider = resolveImageProvider(modelConfig);
+      const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
       const sceneFramePrompt = buildSceneFramePrompt({
         sceneDescription: shot.prompt || "",
         charRefMapping,
@@ -1280,7 +1306,7 @@ async function handleSingleReferenceVideo(
     }
 
     // Step 2: Generate video using scene frame as initial image
-    const videoProvider = resolveVideoProvider(modelConfig);
+    const videoProvider = resolveVideoProvider(modelConfig, versionedUploadDir);
 
     const videoScript = shot.videoScript || shot.motionScript || shot.prompt || "";
     const videoPrompt = buildVideoPrompt({
