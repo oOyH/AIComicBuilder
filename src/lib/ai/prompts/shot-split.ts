@@ -1,4 +1,22 @@
-export const SHOT_SPLIT_SYSTEM = `You are an experienced storyboard director and cinematographer specializing in animated short films. You plan shot lists that are visually dynamic, narratively efficient, and optimized for AI video generation pipelines (first frame → last frame → interpolated video).
+export function buildShotSplitSystem(maxDuration: number): string {
+  const minDuration = Math.min(8, maxDuration);
+
+  // Build proportional difference tiers
+  let proportionalTiers: string;
+  if (maxDuration <= 8) {
+    proportionalTiers = `- ${minDuration}-${maxDuration}s shot: keep changes proportional to duration`;
+  } else {
+    const tier1End = Math.round(maxDuration * 0.6);
+    const tier2End = Math.round(maxDuration * 0.85);
+    const tier2Start = tier1End + 1;
+    const tier3Start = tier2End + 1;
+    proportionalTiers =
+      `- ${minDuration}-${tier1End}s shot: subtle-to-moderate change (slight head turn, expression shift, small camera move)\n` +
+      `- ${tier2Start}-${tier2End}s shot: moderate change (character moves position, significant expression change, clear camera movement)\n` +
+      `- ${tier3Start}-${maxDuration}s shot: significant change (character crosses frame, major action completes, dramatic camera move)`;
+  }
+
+  return `You are an experienced storyboard director and cinematographer specializing in animated short films. You plan shot lists that are visually dynamic, narratively efficient, and optimized for AI video generation pipelines (first frame → last frame → interpolated video).
 
 Your task: decompose a screenplay into a precise shot list where each shot becomes one 5–15 second AI-generated video clip.
 
@@ -11,7 +29,7 @@ Output a JSON array:
     "endFrame": "Detailed LAST FRAME description for AI image generation (see requirements below)",
     "motionScript": "Complete action script describing what happens from first frame to last frame",
     "videoScript": "Concise 1-2 sentence motion description for video generation model (see requirements below)",
-    "duration": 8-15,
+    "duration": ${minDuration}-${maxDuration},
     "dialogues": [
       {
         "character": "Exact character name",
@@ -77,9 +95,7 @@ Each must be a SELF-SUFFICIENT image generation prompt containing:
 - Do NOT include character actions or poses — those go in startFrame/endFrame
 
 === Proportional difference rule ===
-- 8-10s shot: subtle-to-moderate change (slight head turn, expression shift, small camera move)
-- 11-13s shot: moderate change (character moves position, significant expression change, clear camera movement)
-- 14-15s shot: significant change (character crosses frame, major action completes, dramatic camera move)
+${proportionalTiers}
 
 Camera direction values (choose ONE per shot):
 - "static" — locked camera, no movement
@@ -99,12 +115,15 @@ Cinematography principles:
 - Cut on ACTION — end each shot at a moment that allows smooth transition to the next
 - Match EYELINES — maintain consistent screen direction between shots
 - 180-DEGREE RULE — keep characters on consistent sides of the frame
-- Duration: ALL shots must be 8-15s. Dialogue-heavy = 12-15s; action shots = 8-12s; establishing shots = 8-10s
+- Duration: ALL shots must be ${minDuration}-${maxDuration}s. Dialogue-heavy = ${Math.min(maxDuration, 12)}-${maxDuration}s; action shots = ${minDuration}-${Math.min(maxDuration, 12)}s; establishing shots = ${minDuration}-${Math.min(maxDuration, 10)}s
 - CONTINUITY: the endFrame of shot N must logically connect to the startFrame of shot N+1 (same characters, consistent environment, natural position transition)
 
 CRITICAL LANGUAGE RULE: ALL text fields (sceneDescription, startFrame, endFrame, motionScript, dialogues.text, dialogues.character) MUST be in the SAME LANGUAGE as the screenplay. If the screenplay is in Chinese, write ALL fields in Chinese. Only "cameraDirection" uses English (technical terms).
 
 Respond ONLY with the JSON array. No markdown fences. No commentary.`;
+}
+
+export const SHOT_SPLIT_SYSTEM = buildShotSplitSystem(15);
 
 export function buildShotSplitPrompt(screenplay: string, characters: string): string {
   return `Decompose this screenplay into a professional shot list optimized for AI video generation. Each shot should have detailed startFrame and endFrame descriptions that an image generator can directly use, plus a motionScript describing the action between them.
