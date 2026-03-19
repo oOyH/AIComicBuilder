@@ -25,6 +25,7 @@ import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
 import { GenerationModeTab } from "@/components/editor/generation-mode-tab";
 import { ShotDrawer } from "@/components/editor/shot-drawer";
+import { CharactersInlinePanel } from "@/components/editor/characters-inline-panel";
 import Link from "next/link";
 
 export default function StoryboardPage() {
@@ -384,31 +385,13 @@ export default function StoryboardPage() {
           )}
         </div>
 
-        {/* Reference image mode: character indicator */}
-        {generationMode === "reference" && (
-          <div className={`rounded-lg px-3 py-2 text-sm ${
-            hasReferenceImages
-              ? "bg-violet-50 text-violet-700 border border-violet-200"
-              : "bg-amber-50 text-amber-700 border border-amber-200"
-          }`}>
-            {hasReferenceImages ? (
-              <>
-                🖼️ {t("project.referenceCharactersLabel", {
-                  names: charactersWithRefs.map((c) => c.name).join("、"),
-                  count: charactersWithRefs.length,
-                })}
-              </>
-            ) : (
-              <>
-                ⚠️ {t("project.noReferenceImages")}
-                {" — "}
-                <Link href="../characters" className="underline">
-                  {t("project.characters")}
-                </Link>
-              </>
-            )}
-          </div>
-        )}
+        {/* Characters inline panel (Feature B) */}
+        <CharactersInlinePanel
+          characters={project.characters}
+          projectId={project.id}
+          generationMode={generationMode}
+          onUpdate={() => fetchProject(project.id)}
+        />
 
         {/* Batch operations */}
         <div className="space-y-2">
