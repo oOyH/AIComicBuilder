@@ -4,24 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
-import { FileText, Users, Film, Play } from "lucide-react";
+import { FileText, Users, Film, Play, ArrowLeft } from "lucide-react";
 
 interface ProjectNavProps {
   projectId: string;
+  episodeId: string;
 }
 
 const icons = [FileText, Users, Film, Play];
 
-export function ProjectNav({ projectId }: ProjectNavProps) {
+export function ProjectNav({ projectId, episodeId }: ProjectNavProps) {
   const t = useTranslations("project");
+  const tEpisode = useTranslations("episode");
   const locale = useLocale();
   const pathname = usePathname();
 
+  const basePath = `/${locale}/project/${projectId}/episodes/${episodeId}`;
+
   const tabs = [
-    { key: "script", href: `/${locale}/project/${projectId}/script`, num: 1 },
-    { key: "characters", href: `/${locale}/project/${projectId}/characters`, num: 2 },
-    { key: "storyboard", href: `/${locale}/project/${projectId}/storyboard`, num: 3 },
-    { key: "preview", href: `/${locale}/project/${projectId}/preview`, num: 4 },
+    { key: "script", href: `${basePath}/script`, num: 1 },
+    { key: "characters", href: `${basePath}/characters`, num: 2 },
+    { key: "storyboard", href: `${basePath}/storyboard`, num: 3 },
+    { key: "preview", href: `${basePath}/preview`, num: 4 },
   ] as const;
 
   return (
@@ -29,6 +33,13 @@ export function ProjectNav({ projectId }: ProjectNavProps) {
       {/* Desktop sidebar */}
       <nav className="hidden w-60 flex-shrink-0 border-r border-[--border-subtle] bg-white lg:block">
         <div className="flex flex-col gap-1 p-3 pt-4">
+          <Link
+            href={`/${locale}/project/${projectId}/episodes`}
+            className="flex items-center gap-2 px-3 py-2 text-xs text-[--text-muted] hover:text-[--text-primary]"
+          >
+            <ArrowLeft className="h-3 w-3" />
+            {tEpisode("backToList")}
+          </Link>
           <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-[--text-muted]">
             Workflow
           </p>

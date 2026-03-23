@@ -68,7 +68,7 @@ export default function EpisodesPage({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl flex-1 overflow-y-auto bg-[--surface] p-6 pb-24 lg:pb-6">
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
