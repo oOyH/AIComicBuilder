@@ -41,7 +41,7 @@ Screenwriting principles:
 - Dialogue should feel natural; subtext > on-the-nose statements
 - Build a clear three-act structure: SETUP → CONFRONTATION → RESOLUTION
 - End with emotional payoff — surprise, catharsis, or a powerful image
-- Create 4–8 scenes scaled to the idea's complexity
+- Scale the number of scenes to match the target duration specified in the idea. If the idea specifies a target duration (e.g. "目标时长：10分钟"), calculate scenes accordingly: ~1 scene per 30-60 seconds of screen time. A 10-minute episode needs 10-20 scenes, NOT 4-8.
 - Each scene description must be visually specific enough for an AI image generator to produce a frame (describe colors, spatial relationships, lighting quality)
 - Scene descriptions should be consistent with the declared VISUAL STYLE (e.g., if "realistic", describe photographic details; if "anime", describe anime-specific aesthetics)
 
@@ -56,7 +56,8 @@ function detectLanguage(text: string): string {
 
 export function buildScriptGeneratePrompt(idea: string): string {
   const lang = detectLanguage(idea);
-  return `Write a complete, production-ready short-form screenplay based on this creative concept:
+
+  return `Write a complete, production-ready screenplay based on this creative concept:
 
 "${idea}"
 
@@ -65,5 +66,6 @@ OUTPUT LANGUAGE: ${lang}. You MUST write EVERY word of your output in ${lang}, i
 You MUST include all three sections in order: VISUAL STYLE → CHARACTERS → SCENES.
 - If the user specifies an art style (e.g., "真人", "动漫", "realistic", "anime"), use that as the visual style. If not specified, infer the most fitting style from the concept.
 - The CHARACTERS section must have detailed visual descriptions for every character — this is critical because downstream AI image generators will rely on these descriptions to produce consistent character images.
-- Each scene description should be vivid enough for an AI image generator to produce a frame directly.`;
+- Each scene description should be vivid enough for an AI image generator to produce a frame directly.
+- Write RICHLY and in DETAIL — every scene needs specific visual descriptions, character actions, emotional beats, and dialogue. Avoid rushing through the story.`;
 }

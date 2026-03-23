@@ -35,6 +35,7 @@ export function createLanguageModel(config: ProviderConfig): LanguageModel {
  */
 export function extractJSON(text: string): string {
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) return match[1].trim();
-  return text.trim();
+  const raw = match ? match[1].trim() : text.trim();
+  // Remove control characters that break JSON.parse (except \n \r \t)
+  return raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "");
 }

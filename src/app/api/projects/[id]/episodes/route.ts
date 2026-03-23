@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, episodes } from "@/lib/db/schema";
-import { eq, asc, and, max } from "drizzle-orm";
+import { projects, episodes, shots, characters } from "@/lib/db/schema";
+import { eq, asc, and, max, or, isNull, isNotNull } from "drizzle-orm";
 import { ulid } from "ulid";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 
@@ -31,7 +31,57 @@ export async function GET(
     .where(eq(episodes.projectId, id))
     .orderBy(asc(episodes.sequence));
 
-  return NextResponse.json(allEpisodes);
+  // Enrich each episode with preview images for cards
+  const enriched = await Promise.all(
+    allEpisodes.map(async (ep) => {
+      if (ep.finalVideoUrl) return { ...ep, previewImages: [] };
+
+      // 1) Collect frame images from shots, deduplicated
+      const epShots = await db
+        .select({
+          firstFrame: shots.firstFrame,
+          lastFrame: shots.lastFrame,
+          sceneRefFrame: shots.sceneRefFrame,
+        })
+        .from(shots)
+        .where(eq(shots.episodeId, ep.id));
+
+      const frameSet = new Set<string>();
+      const isReference = ep.generationMode === "reference";
+      for (const s of epShots) {
+        if (isReference) {
+          if (s.sceneRefFrame) frameSet.add(s.sceneRefFrame);
+        } else {
+          if (s.firstFrame) frameSet.add(s.firstFrame);
+          if (s.lastFrame) frameSet.add(s.lastFrame);
+        }
+      }
+
+      if (frameSet.size > 0) {
+        return { ...ep, previewImages: [...frameSet] };
+      }
+
+      // 2) Fall back to character reference images (main + this episode's guests)
+      const charImages = await db
+        .select({ referenceImage: characters.referenceImage })
+        .from(characters)
+        .where(
+          and(
+            eq(characters.projectId, id),
+            isNotNull(characters.referenceImage),
+            or(isNull(characters.episodeId), eq(characters.episodeId, ep.id))
+          )
+        );
+
+      const charUrls = charImages
+        .map((c) => c.referenceImage!)
+        .filter(Boolean);
+
+      return { ...ep, previewImages: charUrls };
+    })
+  );
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(

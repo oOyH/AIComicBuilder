@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { Layers, Plus, Loader2, Users, X } from "lucide-react";
+import { Layers, Plus, Loader2, Users, X, Upload, FileUp } from "lucide-react";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -100,15 +100,20 @@ export default function EpisodesPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {episodes.length > 0 && (
-            <Link
-              href={`/${locale}/project/${projectId}/episodes/${episodes[0]?.id}/characters`}
-              className="inline-flex items-center gap-1.5 rounded-[10px] border border-[--border-subtle] bg-white px-3.5 py-2 text-sm font-medium text-[--text-secondary] shadow-sm transition-all hover:border-primary/20 hover:text-primary"
-            >
-              <Users className="h-4 w-4" />
-              {t("mainCharacter")}
-            </Link>
-          )}
+          <Link
+            href={`/${locale}/project/${projectId}/import`}
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[--border-subtle] bg-white px-3.5 py-2 text-sm font-medium text-[--text-secondary] shadow-sm transition-all hover:border-primary/20 hover:text-primary"
+          >
+            <FileUp className="h-4 w-4" />
+            {t("importRecord")}
+          </Link>
+          <Link
+            href={`/${locale}/project/${projectId}/characters`}
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[--border-subtle] bg-white px-3.5 py-2 text-sm font-medium text-[--text-secondary] shadow-sm transition-all hover:border-primary/20 hover:text-primary"
+          >
+            <Users className="h-4 w-4" />
+            {t("characters")}
+          </Link>
           <Button onClick={() => setCreateOpen(true)} className="rounded-[10px]">
             <Plus className="mr-1.5 h-4 w-4" />
             {t("create")}
@@ -128,10 +133,18 @@ export default function EpisodesPage({
           <p className="mt-2 max-w-sm text-sm text-[--text-secondary]">
             {t("noEpisodes")}
           </p>
-          <Button onClick={() => setCreateOpen(true)} className="mt-6 rounded-xl">
-            <Plus className="mr-1.5 h-4 w-4" />
-            {t("create")}
-          </Button>
+          <div className="mt-6 flex items-center gap-3">
+            <Button onClick={() => setCreateOpen(true)} className="rounded-xl">
+              <Plus className="mr-1.5 h-4 w-4" />
+              {t("create")}
+            </Button>
+            <Link href={`/${locale}/project/${projectId}/import`}>
+              <Button variant="outline" className="rounded-xl">
+                <Upload className="mr-1.5 h-4 w-4" />
+                {t("uploadScript")}
+              </Button>
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-4 xl:grid-cols-4">

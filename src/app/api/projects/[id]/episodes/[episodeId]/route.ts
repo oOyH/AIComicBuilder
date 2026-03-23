@@ -7,8 +7,9 @@ import {
   characters,
   dialogues,
   storyboardVersions,
+  episodeCharacters,
 } from "@/lib/db/schema";
-import { eq, asc, and, or, isNull, desc } from "drizzle-orm";
+import { eq, asc, and, or, isNull, desc, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 
 async function resolveProjectAndEpisode(
@@ -66,16 +67,20 @@ export async function GET(
 
   const resolvedVersionId = versionId ?? allVersions[0]?.id;
 
-  // Fetch merged characters: main (episodeId IS NULL) + guest (episodeId = this episode)
-  const episodeCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      and(
-        eq(characters.projectId, id),
-        or(isNull(characters.episodeId), eq(characters.episodeId, episodeId))
-      )
-    );
+  // Fetch characters linked to this episode via episode_characters table
+  const linkedCharIds = await db
+    .select({ characterId: episodeCharacters.characterId })
+    .from(episodeCharacters)
+    .where(eq(episodeCharacters.episodeId, episodeId));
+
+  let epCharacters: typeof characters.$inferSelect[] = [];
+  if (linkedCharIds.length > 0) {
+    epCharacters = await db
+      .select()
+      .from(characters)
+      .where(inArray(characters.id, linkedCharIds.map((r) => r.characterId)));
+  }
+  // No links = no characters for this episode (user needs to run character extraction)
 
   // Fetch shots for this episode + version
   const episodeShots = resolvedVersionId
@@ -113,7 +118,15 @@ export async function GET(
 
   return NextResponse.json({
     ...episode,
-    characters: episodeCharacters,
+    id: project.id,
+    episodeId: episode.id,
+    title: project.title,
+    idea: episode.idea,
+    script: episode.script,
+    status: episode.status,
+    finalVideoUrl: episode.finalVideoUrl,
+    generationMode: episode.generationMode,
+    characters: epCharacters,
     shots: enrichedShots,
     versions: allVersions.map((v) => ({
       id: v.id,

@@ -85,6 +85,20 @@
       "when": 1774600000000,
       "tag": "0011_add_episode_description_keywords",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1774700000000,
+      "tag": "0012_add_import_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1774800000000,
+      "tag": "0013_add_episode_characters",
+      "breakpoints": true
     }
   ]
 }

@@ -64,6 +64,16 @@ export const characters = sqliteTable("characters", {
   }),
 });
 
+export const episodeCharacters = sqliteTable("episode_characters", {
+  id: text("id").primaryKey(),
+  episodeId: text("episode_id")
+    .notNull()
+    .references(() => episodes.id, { onDelete: "cascade" }),
+  characterId: text("character_id")
+    .notNull()
+    .references(() => characters.id, { onDelete: "cascade" }),
+});
+
 export const storyboardVersions = sqliteTable("storyboard_versions", {
   id: text("id").primaryKey(),
   projectId: text("project_id")
@@ -123,6 +133,22 @@ export const dialogues = sqliteTable("dialogues", {
   text: text("text").notNull(),
   audioUrl: text("audio_url"),
   sequence: integer("sequence").notNull().default(0),
+});
+
+export const importLogs = sqliteTable("import_logs", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  step: integer("step").notNull(),
+  status: text("status", { enum: ["running", "done", "error"] })
+    .notNull()
+    .default("running"),
+  message: text("message").notNull().default(""),
+  metadata: text("metadata", { mode: "json" }),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 export const tasks = sqliteTable("tasks", {

@@ -3,8 +3,8 @@ import { streamText } from "ai";
 import { createLanguageModel, extractJSON } from "@/lib/ai/ai-sdk";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 import { db } from "@/lib/db";
-import { projects, episodes, characters, shots, dialogues, storyboardVersions } from "@/lib/db/schema";
-import { eq, asc, and, lt, gt, desc, or, isNull } from "drizzle-orm";
+import { projects, episodes, characters, shots, dialogues, storyboardVersions, episodeCharacters } from "@/lib/db/schema";
+import { eq, asc, and, lt, gt, desc, or, isNull, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
 import { ulid } from "ulid";
@@ -349,21 +349,19 @@ async function handleCharacterExtract(
     );
   }
 
-  // Delete existing characters scoped to this episode (or project-level if no episode)
-  if (episodeId) {
-    await db.delete(characters).where(
-      and(eq(characters.projectId, projectId), eq(characters.episodeId, episodeId))
-    );
-  } else {
-    await db.delete(characters).where(eq(characters.projectId, projectId));
-  }
+  // Fetch all existing project characters for dedup
+  const existingChars = await db
+    .select()
+    .from(characters)
+    .where(eq(characters.projectId, projectId));
+  const existingByName = new Map(
+    existingChars.map((c) => [c.name.toLowerCase().trim(), c])
+  );
 
-  // Fetch existing main characters for deduplication (only when extracting for an episode)
-  const existingMainChars = episodeId
-    ? await db.select().from(characters).where(
-        and(eq(characters.projectId, projectId), eq(characters.scope, "main"))
-      )
-    : [];
+  // If extracting for an episode, clear old episode_characters links for this episode
+  if (episodeId) {
+    await db.delete(episodeCharacters).where(eq(episodeCharacters.episodeId, episodeId));
+  }
 
   const model = createLanguageModel(modelConfig.text);
 
@@ -371,48 +369,59 @@ async function handleCharacterExtract(
     model,
     system: CHARACTER_EXTRACT_SYSTEM,
     prompt: buildCharacterExtractPrompt(script),
-    temperature: 0.5,
     onFinish: async ({ text }) => {
       try {
         const extracted = JSON.parse(extractJSON(text)) as Array<{
           name: string;
           description: string;
           visualHint?: string;
+          scope?: string;
         }>;
 
-        let newCharacters = extracted;
+        let reusedCount = 0;
+        let createdCount = 0;
+        const linkedCharIds: string[] = [];
 
-        // AI deduplication when extracting for an episode with existing main chars
-        if (episodeId && existingMainChars.length > 0) {
-          try {
-            const textProvider = resolveAIProvider(modelConfig);
-            const existingNames = existingMainChars.map((c) => c.name);
-            const dedupeResult = await textProvider.generateText(
-              `Existing characters: ${JSON.stringify(existingNames)}\n\nNewly extracted characters: ${JSON.stringify(extracted.map(c => c.name))}\n\nReturn a JSON array of ONLY the truly new character names that are NOT variants or aliases of existing characters. Consider nicknames, shortened names, and honorific variations as the same character.`,
-              { systemPrompt: "You are a character deduplication assistant. Return only a JSON array of strings.", temperature: 0 }
-            );
-            const newNames = new Set(JSON.parse(dedupeResult) as string[]);
-            newCharacters = extracted.filter((c) => newNames.has(c.name));
-          } catch (dedupeErr) {
-            console.warn("[CharacterExtract] Deduplication failed, inserting all:", dedupeErr);
+        for (const char of extracted) {
+          const key = char.name.toLowerCase().trim();
+          const existing = existingByName.get(key);
+
+          if (existing) {
+            // Reuse existing character
+            linkedCharIds.push(existing.id);
+            reusedCount++;
+          } else {
+            // Create new character
+            const charId = ulid();
+            const scope = char.scope === "guest" ? "guest" : "main";
+            await db.insert(characters).values({
+              id: charId,
+              projectId,
+              name: char.name,
+              description: char.description,
+              visualHint: char.visualHint ?? "",
+              scope,
+              episodeId: null,
+            });
+            existingByName.set(key, { id: charId, name: char.name } as typeof existingChars[0]);
+            linkedCharIds.push(charId);
+            createdCount++;
           }
         }
 
-        const scope = episodeId ? "guest" : "main";
-        for (const char of newCharacters) {
-          await db.insert(characters).values({
-            id: ulid(),
-            projectId,
-            name: char.name,
-            description: char.description,
-            visualHint: char.visualHint ?? "",
-            scope,
-            episodeId: episodeId ?? null,
-          });
+        // Create episode_characters links
+        if (episodeId) {
+          for (const charId of linkedCharIds) {
+            await db.insert(episodeCharacters).values({
+              id: ulid(),
+              episodeId,
+              characterId: charId,
+            });
+          }
         }
 
         console.log(
-          `[CharacterExtract] Extracted ${newCharacters.length} characters (scope=${scope})`
+          `[CharacterExtract] ${extracted.length} characters: ${reusedCount} reused, ${createdCount} new, ${linkedCharIds.length} linked to episode`
         );
       } catch (err) {
         console.error("[CharacterExtract] onFinish error:", err);
@@ -530,7 +539,6 @@ async function handleShotSplitStream(
 ) {
   let script: string | null = null;
   let generationMode: string = "keyframe";
-
   if (episodeId) {
     const [episode] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     if (!episode) {
@@ -554,20 +562,25 @@ async function handleShotSplitStream(
     );
   }
 
-  const projectCharacters = await db
-    .select()
-    .from(characters)
-    .where(
-      episodeId
-        ? and(eq(characters.projectId, projectId), or(isNull(characters.episodeId), eq(characters.episodeId, episodeId)))
-        : eq(characters.projectId, projectId)
-    );
+  // Fetch only characters linked to this episode
+  let shotCharacters: typeof characters.$inferSelect[];
+  if (episodeId) {
+    const linkedIds = await db
+      .select({ characterId: episodeCharacters.characterId })
+      .from(episodeCharacters)
+      .where(eq(episodeCharacters.episodeId, episodeId));
+    shotCharacters = linkedIds.length > 0
+      ? await db.select().from(characters).where(inArray(characters.id, linkedIds.map((r) => r.characterId)))
+      : [];
+  } else {
+    shotCharacters = await db.select().from(characters).where(eq(characters.projectId, projectId));
+  }
 
-  const characterDescriptions = projectCharacters
+  const characterDescriptions = shotCharacters
     .map((c) => `${c.name}: ${c.description}`)
     .join("\n");
 
-  const characterVisualHints = projectCharacters
+  const characterVisualHints = shotCharacters
     .filter((c) => c.visualHint)
     .map((c) => ({ name: c.name, visualHint: c.visualHint! }));
 
@@ -576,12 +589,13 @@ async function handleShotSplitStream(
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const shotSplitPrompt = buildShotSplitPrompt(script || "", characterDescriptions, characterVisualHints);
   console.log("[ShotSplit] characterVisualHints:", JSON.stringify(characterVisualHints));
-  console.log("[ShotSplit] prompt:\n" + shotSplitPrompt);
   const result = streamText({
     model,
     system: buildShotSplitSystem(videoMaxDuration),
     prompt: shotSplitPrompt,
-    temperature: 0.5,
+    providerOptions: {
+      openai: { response_format: { type: "json_object" } },
+    },
     onFinish: async ({ text }) => {
       try {
         const parsedShots = JSON.parse(extractJSON(text)) as Array<{
@@ -641,8 +655,8 @@ async function handleShotSplitStream(
 
           for (let i = 0; i < (shot.dialogues || []).length; i++) {
             const dialogue = shot.dialogues[i];
-            const matchedChar = projectCharacters.find(
-              (c) => c.name === dialogue.character
+            const matchedChar = shotCharacters.find(
+              (c: typeof characters.$inferSelect) => c.name === dialogue.character
             );
             if (matchedChar) {
               await db.insert(dialogues).values({
