@@ -889,9 +889,71 @@ async function handleBatchFrameGenerate(
     return NextResponse.json({ results: [], message: "No shots found" });
   }
 
+  const continueFromPrev = payload?.continueFromPrev === true;
+  let copiedFirstFrame: string | undefined;
+
   const versionedUploadDir = batchVersionId
     ? await getVersionedUploadDir(batchVersionId)
     : process.env.UPLOAD_DIR || "./uploads";
+
+  if (continueFromPrev && episodeId) {
+    // 1. Get current episode's sequence
+    const [currentEp] = await db
+      .select({ sequence: episodes.sequence })
+      .from(episodes)
+      .where(eq(episodes.id, episodeId));
+
+    if (currentEp && currentEp.sequence > 1) {
+      // 2. Find previous episode
+      const [prevEp] = await db
+        .select({ id: episodes.id })
+        .from(episodes)
+        .where(
+          and(
+            eq(episodes.projectId, projectId),
+            eq(episodes.sequence, currentEp.sequence - 1)
+          )
+        );
+
+      if (prevEp) {
+        // 3. Get last shot of previous episode
+        const [lastShot] = await db
+          .select({ lastFrame: shots.lastFrame })
+          .from(shots)
+          .where(eq(shots.episodeId, prevEp.id))
+          .orderBy(desc(shots.sequence))
+          .limit(1);
+
+        if (!lastShot?.lastFrame) {
+          return NextResponse.json(
+            { error: "上一集尚未生成帧，无法续接" },
+            { status: 400 }
+          );
+        }
+
+        // 4. Copy the file
+        const fs = await import("node:fs");
+        const path = await import("node:path");
+        const { ulid: genId } = await import("ulid");
+        const ext = path.extname(lastShot.lastFrame);
+        const destDir = path.resolve(versionedUploadDir, "frames");
+        fs.mkdirSync(destDir, { recursive: true });
+        const destPath = path.join(destDir, `${genId()}${ext}`);
+        fs.copyFileSync(path.resolve(lastShot.lastFrame), destPath);
+        const relativeDest = path.relative(process.cwd(), destPath);
+
+        // 5. Update first shot's firstFrame
+        if (allShots.length > 0) {
+          await db
+            .update(shots)
+            .set({ firstFrame: relativeDest })
+            .where(eq(shots.id, allShots[0].id));
+          allShots[0] = { ...allShots[0], firstFrame: relativeDest };
+          copiedFirstFrame = relativeDest;
+        }
+      }
+    }
+  }
 
   // Fetch only characters linked to this episode
   let frameCharacters: typeof characters.$inferSelect[];
@@ -949,7 +1011,10 @@ async function handleBatchFrameGenerate(
 
       let firstFramePath: string;
 
-      if (i === 0 || !previousLastFrame) {
+      if (copiedFirstFrame && i === 0) {
+        // Episode continuation: use copied frame from previous episode
+        firstFramePath = copiedFirstFrame;
+      } else if (i === 0 || !previousLastFrame) {
         // First shot or broken chain: generate first frame
         const firstPrompt = buildFirstFramePrompt({
           sceneDescription: shot.prompt || "",
