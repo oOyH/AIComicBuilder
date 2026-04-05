@@ -61,14 +61,14 @@ export async function POST(
 
   try {
     const videoPaths = selectedEpisodes.map((e) => e.finalVideoUrl!);
-    const outputPath = await assembleVideo({
+    const result = await assembleVideo({
       videoPaths,
       subtitles: [],
       projectId,
       shotDurations: [],
     });
 
-    return NextResponse.json({ videoUrl: outputPath, status: "ok" });
+    return NextResponse.json({ videoUrl: result.videoPath, status: "ok" });
   } catch (err) {
     console.error("[MergeEpisodes] Error:", err);
     return NextResponse.json(

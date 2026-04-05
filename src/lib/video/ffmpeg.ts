@@ -24,6 +24,44 @@ interface AssembleParams {
   projectId: string;
   shotDurations: number[];
   transitions?: TransitionType[]; // transition between shot[i] and shot[i+1], length = videoPaths.length - 1
+  titleCard?: { text: string; duration: number };
+  creditsCard?: { text: string; duration: number };
+}
+
+interface AssembleResult {
+  videoPath: string;
+  srtPath?: string;
+}
+
+export async function generateTitleCard(
+  text: string,
+  duration: number,
+  outputDir: string,
+  options?: { fontSize?: number; bgColor?: string; textColor?: string }
+): Promise<string> {
+  const { fontSize = 48, bgColor = "black", textColor = "white" } = options || {};
+  const cardPath = path.resolve(outputDir, `title-${ulid()}.mp4`);
+
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg()
+      .input(`color=c=${bgColor}:s=1920x1080:d=${duration}`)
+      .inputOptions(["-f", "lavfi"])
+      .outputOptions([
+        "-vf",
+        `drawtext=text='${text.replace(/'/g, "'\\''")}':fontsize=${fontSize}:fontcolor=${textColor}:x=(w-text_w)/2:y=(h-text_h)/2`,
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "23",
+        "-t", String(duration),
+        "-pix_fmt", "yuv420p",
+      ])
+      .output(cardPath)
+      .on("end", () => resolve())
+      .on("error", (err) => reject(new Error(`Title card generation failed: ${err.message}`)))
+      .run();
+  });
+
+  return cardPath;
 }
 
 function generateSrtFile(
@@ -194,22 +232,49 @@ async function concatWithTransitions(
   });
 }
 
-export async function assembleVideo(params: AssembleParams): Promise<string> {
-  const { videoPaths, subtitles, projectId, shotDurations } = params;
-  const transitions: TransitionType[] = params.transitions
-    ?? new Array(Math.max(videoPaths.length - 1, 0)).fill("cut");
+export async function assembleVideo(params: AssembleParams): Promise<AssembleResult> {
+  const { subtitles, projectId } = params;
+  const allPaths = [...params.videoPaths];
+  const allDurations = [...params.shotDurations];
 
   const outputDir = path.resolve(uploadDir, "videos");
   fs.mkdirSync(outputDir, { recursive: true });
+
+  // Prepend title card if specified
+  if (params.titleCard) {
+    const titlePath = await generateTitleCard(
+      params.titleCard.text,
+      params.titleCard.duration,
+      outputDir
+    );
+    allPaths.unshift(titlePath);
+    allDurations.unshift(params.titleCard.duration);
+  }
+
+  // Append credits card if specified
+  if (params.creditsCard) {
+    const creditsPath = await generateTitleCard(
+      params.creditsCard.text,
+      params.creditsCard.duration,
+      outputDir
+    );
+    allPaths.push(creditsPath);
+    allDurations.push(params.creditsCard.duration);
+  }
+
+  const transitions: TransitionType[] = params.transitions
+    ?? new Array(Math.max(allPaths.length - 1, 0)).fill("cut");
+
   const concatOutputPath = path.resolve(outputDir, `${projectId}-concat-${ulid()}.mp4`);
   const outputPath = path.resolve(outputDir, `${projectId}-final-${ulid()}.mp4`);
 
   // Step 1: Concatenate video clips (with transitions)
-  await concatWithTransitions(videoPaths, transitions, shotDurations, concatOutputPath, projectId, outputDir);
+  await concatWithTransitions(allPaths, transitions, allDurations, concatOutputPath, projectId, outputDir);
 
   // Step 2: Burn in subtitles if any
+  let srtPath: string | undefined;
   if (subtitles.length > 0) {
-    const srtPath = generateSrtFile(subtitles, shotDurations, outputPath);
+    srtPath = generateSrtFile(subtitles, allDurations, outputPath);
     const escapedSrtPath = escapeSubtitlePath(path.resolve(srtPath));
 
     try {
@@ -227,7 +292,7 @@ export async function assembleVideo(params: AssembleParams): Promise<string> {
           .output(outputPath)
           .on("end", () => {
             fs.unlinkSync(concatOutputPath);
-            fs.unlinkSync(srtPath);
+            // Keep SRT file for external subtitle export
             resolve();
           })
           .on("error", (err) => {
@@ -238,7 +303,6 @@ export async function assembleVideo(params: AssembleParams): Promise<string> {
     } catch (err) {
       // Fallback: skip subtitle burn, use concat output directly
       console.warn(`[FFmpeg] Subtitle burn failed, using concat output: ${err}`);
-      try { fs.unlinkSync(srtPath); } catch {}
       fs.renameSync(concatOutputPath, outputPath);
     }
   } else {
@@ -246,6 +310,9 @@ export async function assembleVideo(params: AssembleParams): Promise<string> {
     fs.renameSync(concatOutputPath, outputPath);
   }
 
-  // Return relative path for uploadUrl compatibility
-  return path.relative(process.cwd(), outputPath);
+  // Return relative paths for uploadUrl compatibility
+  return {
+    videoPath: path.relative(process.cwd(), outputPath),
+    srtPath: srtPath ? path.relative(process.cwd(), srtPath) : undefined,
+  };
 }

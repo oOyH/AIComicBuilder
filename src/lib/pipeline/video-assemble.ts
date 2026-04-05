@@ -75,7 +75,7 @@ export async function handleVideoAssemble(task: Task) {
     });
   }
 
-  const outputPath = await assembleVideo({
+  const result = await assembleVideo({
     videoPaths,
     subtitles,
     projectId: payload.projectId,
@@ -88,5 +88,5 @@ export async function handleVideoAssemble(task: Task) {
     .set({ status: "completed", updatedAt: new Date() })
     .where(eq(projects.id, payload.projectId));
 
-  return { outputPath };
+  return { outputPath: result.videoPath, srtPath: result.srtPath };
 }

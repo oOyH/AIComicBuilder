@@ -2198,7 +2198,7 @@ async function handleVideoAssembleSync(projectId: string, payload?: Record<strin
   }
 
   try {
-    const outputPath = await assembleVideo({
+    const result = await assembleVideo({
       videoPaths,
       subtitles: allSubtitles,
       projectId,
@@ -2209,17 +2209,17 @@ async function handleVideoAssembleSync(projectId: string, payload?: Record<strin
     if (episodeId) {
       await db
         .update(episodes)
-        .set({ status: "completed", finalVideoUrl: outputPath, updatedAt: new Date() })
+        .set({ status: "completed", finalVideoUrl: result.videoPath, updatedAt: new Date() })
         .where(eq(episodes.id, episodeId));
     } else {
       await db
         .update(projects)
-        .set({ status: "completed", finalVideoUrl: outputPath, updatedAt: new Date() })
+        .set({ status: "completed", finalVideoUrl: result.videoPath, updatedAt: new Date() })
         .where(eq(projects.id, projectId));
     }
 
-    console.log(`[VideoAssemble] Completed: ${outputPath}`);
-    return NextResponse.json({ outputPath, status: "ok" });
+    console.log(`[VideoAssemble] Completed: ${result.videoPath}`);
+    return NextResponse.json({ outputPath: result.videoPath, srtPath: result.srtPath, status: "ok" });
   } catch (err) {
     console.error("[VideoAssemble] Error:", err);
     return NextResponse.json({ status: "error", error: extractErrorMessage(err) }, { status: 500 });
