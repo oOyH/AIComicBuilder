@@ -2065,33 +2065,63 @@ async function handleVideoAssembleSync(projectId: string, payload?: Record<strin
     return NextResponse.json({ error: "No video clips to assemble" }, { status: 400 });
   }
 
+  // Build transitions array from shot transitionOut / transitionIn fields
+  type TransitionType = "cut" | "dissolve" | "fade_in" | "fade_out" | "wipeleft" | "slideright" | "circleopen";
+  const completedShots = projectShots.filter((s) => isReference ? s.referenceVideoUrl : s.videoUrl);
+  const transitions: TransitionType[] = completedShots.slice(0, -1).map((shot, i) => {
+    const nextShot = completedShots[i + 1];
+    return ((shot.transitionOut && shot.transitionOut !== "cut")
+      ? shot.transitionOut
+      : (nextShot?.transitionIn || "cut")) as TransitionType;
+  });
+
   // Get dialogues for subtitles
-  const allDialogues = [];
-  for (const shot of projectShots) {
+  const allSubtitles: {
+    text: string;
+    shotSequence: number;
+    dialogueSequence: number;
+    dialogueCount: number;
+    startRatio?: number;
+    endRatio?: number;
+  }[] = [];
+  for (const shot of completedShots) {
     const shotDialogues = await db
       .select({
         text: dialogues.text,
         characterName: characters.name,
         sequence: dialogues.sequence,
         shotSequence: shots.sequence,
+        startRatio: dialogues.startRatio,
+        endRatio: dialogues.endRatio,
       })
       .from(dialogues)
       .innerJoin(characters, eq(dialogues.characterId, characters.id))
       .innerJoin(shots, eq(dialogues.shotId, shots.id))
       .where(eq(dialogues.shotId, shot.id))
       .orderBy(asc(dialogues.sequence));
-    allDialogues.push(...shotDialogues);
+
+    const count = shotDialogues.length;
+    shotDialogues.forEach((d, idx) => {
+      const sr = d.startRatio ? parseFloat(String(d.startRatio)) : undefined;
+      const er = d.endRatio ? parseFloat(String(d.endRatio)) : undefined;
+      allSubtitles.push({
+        text: `${d.characterName}: ${d.text}`,
+        shotSequence: d.shotSequence,
+        dialogueSequence: idx,
+        dialogueCount: count,
+        startRatio: sr,
+        endRatio: er,
+      });
+    });
   }
 
   try {
     const outputPath = await assembleVideo({
       videoPaths,
-      subtitles: allDialogues.map((d) => ({
-        text: `${d.characterName}: ${d.text}`,
-        shotSequence: d.shotSequence,
-      })),
+      subtitles: allSubtitles,
       projectId,
-      shotDurations: projectShots.map((s) => s.duration ?? 10),
+      shotDurations: completedShots.map((s) => s.duration ?? 10),
+      transitions,
     });
 
     if (episodeId) {
