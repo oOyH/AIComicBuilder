@@ -5,29 +5,32 @@ import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 
-const OUTLINE_SYSTEM = `You are an award-winning screenwriter. Generate a story outline from the user's creative concept.
+const OUTLINE_SYSTEM = `你是一位屡获殊荣的编剧。根据用户的创意构想，生成一份简洁的故事大纲。
 
-Outline structure:
-1. Premise (one-sentence core conflict)
-2. 3-5 key beats, each containing:
-   - Beat name
-   - Core action/event
-   - Emotional shift
-   - Estimated proportion (e.g., 20%)
-3. Climax description
-4. Ending direction
+输出格式——纯文本时间轴，不要JSON，不要markdown：
 
-CRITICAL LANGUAGE RULE: Output in the SAME language as the user's input. Chinese input = Chinese output. English input = English output.
+前提：（一句话核心冲突）
 
-Output as JSON:
-{
-  "premise": "one-line premise",
-  "beats": [
-    { "name": "...", "action": "...", "emotion": "...", "ratio": "20%" }
-  ],
-  "climax": "...",
-  "ending": "..."
-}`;
+1. [节拍名] (占比XX%)
+   事件：……
+   情感：……
+
+2. [节拍名] (占比XX%)
+   事件：……
+   情感：……
+
+3. [节拍名] (占比XX%)
+   事件：……
+   情感：……
+
+高潮：……
+结局：……
+
+要求：
+- 3-5个关键节拍，每个包含事件和情感转变
+- 占比之和应为100%
+- 语言规则：使用与用户输入相同的语言（中文输入→中文输出，英文输入→英文输出）
+- 直接输出内容，不要任何包裹或标记`;
 
 export async function handleScriptOutline(task: Task) {
   const payload = task.payload as {
@@ -41,44 +44,25 @@ export async function handleScriptOutline(task: Task) {
   const { projectId, episodeId, idea } = payload;
 
   const ai = resolveAIProvider(payload.modelConfig);
-  const rawResult = await ai.generateText(`Creative concept: ${idea}`, {
+  const result = await ai.generateText(`创意构想：${idea}`, {
     systemPrompt: OUTLINE_SYSTEM,
     temperature: 0.7,
   });
 
-  // Extract pure JSON from AI response (strip markdown code blocks if present)
-  let result = rawResult.trim();
-  const jsonMatch = result.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    result = jsonMatch[1].trim();
-  } else {
-    // Try to find a JSON object directly
-    const objMatch = result.match(/\{[\s\S]*\}/);
-    if (objMatch) {
-      result = objMatch[0];
-    }
-  }
-
-  // Validate it's parseable JSON
-  try {
-    JSON.parse(result);
-  } catch {
-    // If still not valid JSON, wrap the raw text
-    console.warn("[ScriptOutline] AI did not return valid JSON, storing raw text");
-  }
+  const outline = result.trim();
 
   // Save outline
   if (episodeId) {
     await db
       .update(episodes)
-      .set({ outline: result, updatedAt: new Date() })
+      .set({ outline, updatedAt: new Date() })
       .where(eq(episodes.id, episodeId));
   } else {
     await db
       .update(projects)
-      .set({ outline: result, updatedAt: new Date() })
+      .set({ outline, updatedAt: new Date() })
       .where(eq(projects.id, projectId));
   }
 
-  return { outline: result };
+  return { outline };
 }
