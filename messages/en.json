@@ -139,6 +139,10 @@
     "regeneratePrompt": "Regenerate Prompt",
     "regenerateVideo": "Regenerate Video"
   },
+  "storyboard": {
+    "stale": "Outdated",
+    "regenerateStale": "Regenerate outdated shots"
+  },
   "episode": {
     "title": "Episodes",
     "count": "episodes",

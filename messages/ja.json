@@ -139,6 +139,10 @@
     "regeneratePrompt": "プロンプトを再生成",
     "regenerateVideo": "動画を再生成"
   },
+  "storyboard": {
+    "stale": "更新が必要",
+    "regenerateStale": "古いショットを再生成"
+  },
   "episode": {
     "title": "エピソード管理",
     "count": "エピソード",

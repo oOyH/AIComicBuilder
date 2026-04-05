@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, asc, and, or, isNull, desc, inArray } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { markDownstreamStale } from "@/lib/staleness";
 
 async function resolveProjectAndEpisode(
   projectId: string,
@@ -182,6 +183,10 @@ export async function PATCH(
     })
     .where(eq(episodes.id, episodeId))
     .returning();
+
+  if (script !== undefined) {
+    await markDownstreamStale("episode", episodeId);
+  }
 
   return NextResponse.json(updated);
 }

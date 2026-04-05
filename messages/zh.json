@@ -139,6 +139,10 @@
     "regeneratePrompt": "重新生成提示词",
     "regenerateVideo": "重新生成视频"
   },
+  "storyboard": {
+    "stale": "需要更新",
+    "regenerateStale": "重新生成过期镜头"
+  },
   "episode": {
     "title": "分集管理",
     "count": "集",

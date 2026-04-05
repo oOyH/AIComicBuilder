@@ -41,6 +41,7 @@ export const episodes = sqliteTable("episodes", {
     .default("keyframe"),
   description: text("description").default(""),
   keywords: text("keywords").default(""),
+  scriptHash: text("script_hash").default(""),
   finalVideoUrl: text("final_video_url"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
@@ -60,6 +61,7 @@ export const characters = sqliteTable("characters", {
   visualHint: text("visual_hint").default(""),
   referenceImage: text("reference_image"),
   scope: text("scope", { enum: ["main", "guest"] }).notNull().default("main"),
+  isStale: integer("is_stale").notNull().default(0),
   episodeId: text("episode_id").references(() => episodes.id, {
     onDelete: "cascade",
   }),
@@ -118,6 +120,7 @@ export const shots = sqliteTable("shots", {
   versionId: text("version_id").references(() => storyboardVersions.id, {
     onDelete: "cascade",
   }),
+  isStale: integer("is_stale").notNull().default(0),
   status: text("status", {
     enum: ["pending", "generating", "completed", "failed"],
   })

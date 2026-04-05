@@ -51,6 +51,7 @@ interface ShotCardProps {
   videoUrl: string | null;
   sceneRefFrame?: string | null;
   videoPrompt?: string | null;
+  isStale?: boolean;
   status: string;
   dialogues: Dialogue[];
   onUpdate: () => void;
@@ -142,6 +143,7 @@ export function ShotCard({
   videoUrl,
   sceneRefFrame,
   videoPrompt,
+  isStale,
   status,
   dialogues,
   onUpdate,
@@ -462,7 +464,14 @@ export function ShotCard({
 
         {/* Scene summary + meta */}
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm text-[--text-primary]">{prompt}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm text-[--text-primary]">{prompt}</p>
+            {isStale ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 flex-shrink-0">
+                {t("storyboard.stale")}
+              </span>
+            ) : null}
+          </div>
           <div className="mt-1 flex items-center gap-2">
             {/* Duration */}
             <span className="flex items-center gap-1 text-xs text-[--text-muted]">

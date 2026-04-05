@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { projects, episodes, characters, shots, dialogues, storyboardVersions } from "@/lib/db/schema";
 import { eq, asc, and, desc } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
+import { markDownstreamStale } from "@/lib/staleness";
 
 async function resolveProject(id: string, userId: string) {
   const [project] = await db
@@ -127,6 +128,10 @@ export async function PATCH(
     })
     .where(eq(projects.id, id))
     .returning();
+
+  if (script !== undefined) {
+    await markDownstreamStale("project", id);
+  }
 
   return NextResponse.json(updated);
 }
