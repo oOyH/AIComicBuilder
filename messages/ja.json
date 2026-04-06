@@ -147,6 +147,7 @@
     "regenerateVideo": "動画を再生成",
     "referenceImages": "参照画像",
     "addRefImage": "参照を追加",
+    "refImagePrompt": "参照画像のプロンプト...",
     "maxRefImages": "最大9枚の参照画像",
     "transition": "トランジション"
   },

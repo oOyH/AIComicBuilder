@@ -29,6 +29,8 @@ import {
   Plus,
 } from "lucide-react";
 import { AiOptimizeButton } from "./ai-optimize-button";
+import { parseRefImages, serializeRefImages, type RefImage } from "@/lib/ref-image-utils";
+import { id as genId } from "@/lib/id";
 
 interface Dialogue {
   id: string;
@@ -220,13 +222,8 @@ export function ShotCard({
   const videoGuard = useModelGuard("video");
 
   // Parse multi-reference images
-  const parsedRefImages: string[] = useMemo(() => {
-    try {
-      const parsed = JSON.parse(referenceImages || "[]");
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+  const parsedRefImages = useMemo(() => {
+    return parseRefImages(referenceImages);
   }, [referenceImages]);
 
   // Derived state
@@ -363,45 +360,39 @@ export function ShotCard({
     onUpdate();
   }
 
-  async function handleAddRefImage() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("field", "reference_image");
-
-      try {
-        const resp = await apiFetch(`/api/projects/${projectId}/shots/${id}/upload`, {
-          method: "POST",
-          body: formData,
-        });
-        if (!resp.ok) throw new Error("Upload failed");
-        const data = await resp.json();
-
-        // Add to reference images array
-        const updatedRefs = [...parsedRefImages, data.url];
-        await patchShot({ referenceImages: JSON.stringify(updatedRefs) });
-        onUpdate();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to upload reference image");
-      }
-    };
-    input.click();
-  }
-
-  async function handleRemoveRefImage(index: number) {
-    const updatedRefs = parsedRefImages.filter((_, i) => i !== index);
-    await patchShot({ referenceImages: JSON.stringify(updatedRefs) });
+  // Save ref images array to shot
+  async function saveRefImages(updated: RefImage[]) {
+    await patchShot({ referenceImages: serializeRefImages(updated) });
     onUpdate();
   }
 
-  async function handleRegenerateRefImage(index: number) {
+  // Add empty ref image card
+  function handleAddRefImage() {
+    const updated = [...parsedRefImages, { id: genId(), prompt: "", status: "pending" as const }];
+    saveRefImages(updated);
+  }
+
+  // Remove a ref image
+  function handleRemoveRefImage(refId: string) {
+    const updated = parsedRefImages.filter((r) => r.id !== refId);
+    saveRefImages(updated);
+  }
+
+  // Update a ref image's prompt
+  function handleUpdateRefPrompt(refId: string, prompt: string) {
+    const updated = parsedRefImages.map((r) => r.id === refId ? { ...r, prompt } : r);
+    saveRefImages(updated);
+  }
+
+  // Regenerate a single ref image
+  async function handleRegenerateRefImage(refId: string) {
     if (!imageGuard()) return;
+
+    // Set to pending first
+    const updated = parsedRefImages.map((r) =>
+      r.id === refId ? { ...r, imagePath: undefined, status: "pending" as const } : r
+    );
+    await saveRefImages(updated);
 
     try {
       const modelConfig = getModelConfig();
@@ -409,16 +400,15 @@ export function ShotCard({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "single_scene_frame",
-          payload: { shotId: id, refImageIndex: index },
+          action: "single_ref_image_generate",
+          payload: { shotId: id, refImageId: refId },
           modelConfig,
         }),
       });
-      if (!resp.ok) throw new Error("Regeneration failed");
-      toast.success(`Reference image ${index + 1} regenerating...`);
+      if (!resp.ok) throw new Error("Failed");
       onUpdate();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to regenerate reference image");
+    } catch {
+      toast.error(t("common.generationFailed"));
     }
   }
 
@@ -800,78 +790,120 @@ export function ShotCard({
         >
           {/* Frame thumbnails */}
           {generationMode === "reference" ? (
-            <div className="mb-2.5 space-y-2">
-              {/* Scene ref frame — same style as keyframe thumbnails */}
-              <div className="flex gap-2">
-                <div className="flex flex-col gap-1" style={{ width: "50%" }}>
-                  <div
-                    className={`relative overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] ${sceneRefFrame ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
-                    onClick={() => sceneRefFrame && setPreviewSrc(uploadUrl(sceneRefFrame))}
-                  >
-                    {sceneRefFrame ? (
-                      <img src={uploadUrl(sceneRefFrame)} className="w-full object-contain" />
-                    ) : (
-                      <div className="flex h-16 items-center justify-center"><ImageIcon className="h-4 w-4 text-[--text-muted]" /></div>
-                    )}
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => handleUploadFrame("sceneRefFrame")}
-                      className="flex flex-1 items-center justify-center gap-1 rounded-md border border-[--border-subtle] bg-white py-0.5 text-[10px] text-[--text-muted] transition-colors hover:border-primary/40 hover:text-primary"
-                    >
-                      <Upload className="h-2.5 w-2.5" />
-                      {t("shot.sceneRefFrame")}
-                    </button>
-                    {sceneRefFrame && (
-                      <button
-                        onClick={() => handleClearFrame("sceneRefFrame")}
-                        className="flex items-center justify-center rounded-md border border-[--border-subtle] bg-white px-1.5 py-0.5 text-[10px] text-[--text-muted] transition-colors hover:border-red-300 hover:text-red-500"
-                      >
-                        <Trash2 className="h-2.5 w-2.5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Reference images — compact row */}
-                {parsedRefImages.map((img, idx) => (
-                  <div key={idx} className="flex flex-col gap-1" style={{ width: "50%" }}>
-                    <div
-                      className="relative overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] cursor-pointer hover:opacity-80 transition-opacity group"
-                      onClick={() => setPreviewSrc(uploadUrl(img))}
-                    >
-                      <img src={uploadUrl(img)} className="w-full object-contain" />
-                      <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleRegenerateRefImage(idx); }}
-                          className="rounded bg-black/60 p-0.5 text-white hover:bg-black/80"
+            <div className="mb-2.5 space-y-3">
+              {/* Reference image cards */}
+              <div className="flex gap-2 flex-wrap">
+                {parsedRefImages.map((ref) => (
+                  <div key={ref.id} className="flex flex-col gap-1" style={{ width: "calc(50% - 4px)" }}>
+                    {/* Image area */}
+                    <div className="relative group">
+                      {ref.imagePath ? (
+                        <div
+                          className="overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => setPreviewSrc(uploadUrl(ref.imagePath!))}
                         >
-                          <RefreshCw className="h-2.5 w-2.5" />
-                        </button>
+                          <img src={uploadUrl(ref.imagePath)} className="w-full object-contain" />
+                        </div>
+                      ) : (
+                        <div className="flex h-20 items-center justify-center rounded-lg border border-dashed border-[--border-subtle] bg-[--surface]">
+                          {ref.prompt ? (
+                            <button
+                              onClick={() => handleRegenerateRefImage(ref.id)}
+                              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80"
+                            >
+                              <Sparkles className="h-3 w-3" />
+                              {t("common.generate") || "Generate"}
+                            </button>
+                          ) : (
+                            <ImageIcon className="h-4 w-4 text-[--text-muted]" />
+                          )}
+                        </div>
+                      )}
+                      {/* Hover overlay buttons */}
+                      {ref.imagePath && (
+                        <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRegenerateRefImage(ref.id); }}
+                            className="rounded bg-black/60 p-0.5 text-white hover:bg-black/80"
+                            title={t("common.regenerate") || "Regenerate"}
+                          >
+                            <RefreshCw className="h-2.5 w-2.5" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleRemoveRefImage(ref.id); }}
+                            className="rounded bg-black/60 p-0.5 text-white hover:bg-red-600/80"
+                            title={t("common.delete") || "Delete"}
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                          </button>
+                        </div>
+                      )}
+                      {!ref.imagePath && (
                         <button
-                          onClick={(e) => { e.stopPropagation(); handleRemoveRefImage(idx); }}
-                          className="rounded bg-black/60 p-0.5 text-white hover:bg-red-600/80"
+                          onClick={() => handleRemoveRefImage(ref.id)}
+                          className="absolute top-0.5 right-0.5 rounded bg-black/40 p-0.5 text-white hover:bg-red-600/80"
                         >
                           <Trash2 className="h-2.5 w-2.5" />
                         </button>
-                      </div>
+                      )}
                     </div>
-                    <span className="text-center text-[10px] text-[--text-muted]">{t("shot.referenceImages")} {idx + 1}</span>
+                    {/* Editable prompt below image */}
+                    <textarea
+                      key={ref.id}
+                      defaultValue={ref.prompt}
+                      onBlur={(e) => handleUpdateRefPrompt(ref.id, e.target.value)}
+                      placeholder={t("shot.refImagePrompt") || "Reference image prompt..."}
+                      rows={2}
+                      className="w-full resize-none rounded-md border border-[--border-subtle] bg-white px-2 py-1 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:border-primary/40 focus:outline-none"
+                    />
                   </div>
                 ))}
 
-                {/* Add button — small, matching frame style */}
+                {/* Add button */}
                 {parsedRefImages.length < 9 && (
-                  <div className="flex flex-col gap-1" style={{ width: "50%" }}>
+                  <div className="flex flex-col gap-1" style={{ width: "calc(50% - 4px)" }}>
                     <button
                       onClick={handleAddRefImage}
-                      className="flex h-16 items-center justify-center rounded-lg border border-dashed border-[--border-subtle] bg-[--surface] text-[--text-muted] hover:border-primary/40 hover:text-primary transition-colors"
+                      className="flex h-20 items-center justify-center rounded-lg border border-dashed border-[--border-subtle] bg-[--surface] text-[--text-muted] hover:border-primary/40 hover:text-primary transition-colors"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                     <span className="text-center text-[10px] text-[--text-muted]">{t("shot.addRefImage")}</span>
                   </div>
                 )}
+              </div>
+
+              {/* Scene ref frame (below ref images) */}
+              <div className="flex items-center gap-2 pt-1 border-t border-[--border-subtle]">
+                <div
+                  className={`overflow-hidden rounded-lg border border-[--border-subtle] bg-[--surface] w-20 shrink-0 ${sceneRefFrame ? "cursor-pointer hover:opacity-80" : ""}`}
+                  onClick={() => sceneRefFrame && setPreviewSrc(uploadUrl(sceneRefFrame))}
+                >
+                  {sceneRefFrame ? (
+                    <img src={uploadUrl(sceneRefFrame)} className="w-full object-contain" />
+                  ) : (
+                    <div className="flex h-12 items-center justify-center"><ImageIcon className="h-3.5 w-3.5 text-[--text-muted]" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] text-[--text-muted]">{t("shot.sceneRefFrame")}</span>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => handleUploadFrame("sceneRefFrame")}
+                    className="flex items-center gap-1 rounded-md border border-[--border-subtle] bg-white px-1.5 py-0.5 text-[10px] text-[--text-muted] hover:border-primary/40 hover:text-primary"
+                  >
+                    <Upload className="h-2.5 w-2.5" />
+                  </button>
+                  {sceneRefFrame && (
+                    <button
+                      onClick={() => handleClearFrame("sceneRefFrame")}
+                      className="flex items-center rounded-md border border-[--border-subtle] bg-white px-1.5 py-0.5 text-[10px] text-[--text-muted] hover:border-red-300 hover:text-red-500"
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

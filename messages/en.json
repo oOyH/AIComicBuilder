@@ -147,6 +147,7 @@
     "regenerateVideo": "Regenerate Video",
     "referenceImages": "Reference Images",
     "addRefImage": "Add Reference",
+    "refImagePrompt": "Reference image prompt...",
     "maxRefImages": "Max 9 reference images",
     "transition": "Transition"
   },

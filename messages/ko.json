@@ -147,6 +147,7 @@
     "regenerateVideo": "비디오 재생성",
     "referenceImages": "참조 이미지",
     "addRefImage": "참조 추가",
+    "refImagePrompt": "참조 이미지 프롬프트...",
     "maxRefImages": "최대 9개의 참조 이미지",
     "transition": "전환"
   },
