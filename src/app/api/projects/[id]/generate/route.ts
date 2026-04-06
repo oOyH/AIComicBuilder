@@ -1780,63 +1780,75 @@ async function handleBatchSceneFrame(
 
   const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
 
-  const results: Array<{ shotId: string; sequence: number; status: "ok" | "error"; generated: number; error?: string }> = [];
-
-  for (const shot of allShots) {
+  // Mark all eligible shots as generating
+  const eligible = allShots.filter((shot) => {
     const refImages = parseRefImages(shot.referenceImages as string);
     const targets = overwrite
       ? refImages.filter((r) => r.prompt.trim())
       : refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+    return targets.length > 0;
+  });
 
-    if (targets.length === 0) {
-      results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", generated: 0 });
-      continue;
-    }
+  await Promise.all(
+    eligible.map((shot) => db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id)))
+  );
 
-    // Use pre-stored character names from ref prompt generation
-    const storedCharNames = targets[0]?.characters || [];
-    const relevantChars = storedCharNames.length > 0
-      ? charsWithRefs.filter((c) => storedCharNames.includes(c.name))
-      : charsWithRefs.slice(0, 3);
-    const shotCharRefs = relevantChars.map((c) => c.referenceImage as string);
+  // Process all shots concurrently
+  const results = await Promise.all(
+    allShots.map(async (shot) => {
+      const refImages = parseRefImages(shot.referenceImages as string);
+      const targets = overwrite
+        ? refImages.filter((r) => r.prompt.trim())
+        : refImages.filter((r) => r.status === "pending" && r.prompt.trim());
 
-    console.log(`[BatchRefImage] Shot ${shot.sequence}: using ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ")}`);
-
-    await db.update(shots).set({ status: "generating" }).where(eq(shots.id, shot.id));
-    let generated = 0;
-
-    for (const entry of targets) {
-      const entryCharRefs = shotCharRefs;
-
-      try {
-        const imagePath = await imageProvider.generateImage(entry.prompt, {
-          quality: "hd",
-          ...imageOpts,
-          referenceImages: entryCharRefs,
-        });
-        entry.imagePath = imagePath;
-        entry.status = "generated";
-        generated++;
-        console.log(`[BatchRefImage] Shot ${shot.sequence}: generated ref "${entry.id}"`);
-      } catch (err) {
-        console.warn(`[BatchRefImage] Shot ${shot.sequence} ref ${entry.id} failed:`, err);
+      if (targets.length === 0) {
+        return { shotId: shot.id, sequence: shot.sequence, status: "ok" as const, generated: 0 };
       }
-    }
 
-    // Set sceneRefFrame to first generated image (for video gen compatibility)
-    const firstGenerated = refImages.find((r) => r.status === "generated" && r.imagePath);
+      // Use pre-stored character names
+      const storedCharNames = targets[0]?.characters || [];
+      const relevantChars = storedCharNames.length > 0
+        ? charsWithRefs.filter((c) => storedCharNames.includes(c.name))
+        : charsWithRefs.slice(0, 3);
+      const shotCharRefs = relevantChars.map((c) => c.referenceImage as string);
 
-    await db
-      .update(shots)
-      .set({
-        referenceImages: serializeRefImages(refImages),
-        ...(firstGenerated?.imagePath ? { sceneRefFrame: firstGenerated.imagePath } : {}),
-        status: "pending",
-      })
-      .where(eq(shots.id, shot.id));
+      console.log(`[BatchRefImage] Shot ${shot.sequence}: ${targets.length} refs, ${relevantChars.length} chars: ${relevantChars.map(c => c.name).join(", ")}`);
 
-    results.push({ shotId: shot.id, sequence: shot.sequence, status: "ok", generated });
-  }
+      // Generate all ref images for this shot concurrently
+      const genResults = await Promise.all(
+        targets.map(async (entry) => {
+          try {
+            const imagePath = await imageProvider.generateImage(entry.prompt, {
+              quality: "hd",
+              ...imageOpts,
+              referenceImages: shotCharRefs,
+            });
+            entry.imagePath = imagePath;
+            entry.status = "generated";
+            console.log(`[BatchRefImage] Shot ${shot.sequence}: ref "${entry.id}" done`);
+            return true;
+          } catch (err) {
+            console.warn(`[BatchRefImage] Shot ${shot.sequence} ref ${entry.id} failed:`, err);
+            return false;
+          }
+        })
+      );
+
+      const generated = genResults.filter(Boolean).length;
+      const firstGenerated = refImages.find((r) => r.status === "generated" && r.imagePath);
+
+      await db
+        .update(shots)
+        .set({
+          referenceImages: serializeRefImages(refImages),
+          ...(firstGenerated?.imagePath ? { sceneRefFrame: firstGenerated.imagePath } : {}),
+          status: "pending",
+        })
+        .where(eq(shots.id, shot.id));
+
+      return { shotId: shot.id, sequence: shot.sequence, status: "ok" as const, generated };
+    })
+  );
 
   return NextResponse.json({ results });
 }
