@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { useModelStore } from "@/stores/model-store";
+import { useProjectStore } from "@/stores/project-store";
 import { useModelGuard } from "@/hooks/use-model-guard";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
@@ -865,6 +866,35 @@ export function ShotCard({
                         rows={4}
                         className="w-full resize-none border-0 border-t border-[--border-subtle] bg-transparent px-2 py-1.5 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:outline-none"
                       />
+                      {/* Character tags */}
+                      <div className="flex items-center gap-1 flex-wrap border-t border-[--border-subtle] px-2 py-1.5">
+                        <span className="text-[9px] text-[--text-muted] shrink-0">{t("shot.refChars") || "Chars"}:</span>
+                        {(useProjectStore.getState().project?.characters || []).map((char) => {
+                          const isSelected = ref.characters?.includes(char.name);
+                          return (
+                            <button
+                              key={char.id}
+                              onClick={() => {
+                                const currentChars = ref.characters || [];
+                                const newChars = isSelected
+                                  ? currentChars.filter((n) => n !== char.name)
+                                  : [...currentChars, char.name];
+                                const updated = parsedRefImages.map((r) =>
+                                  r.id === ref.id ? { ...r, characters: newChars } : r
+                                );
+                                saveRefImages(updated);
+                              }}
+                              className={`rounded-full px-1.5 py-0.5 text-[9px] transition-colors ${
+                                isSelected
+                                  ? "bg-primary/10 text-primary border border-primary/30"
+                                  : "bg-[--bg-muted] text-[--text-muted] border border-transparent hover:border-[--border-subtle]"
+                              }`}
+                            >
+                              {char.name}
+                            </button>
+                          );
+                        })}
+                      </div>
                       {/* Action bar */}
                       <div className="flex items-center gap-1 border-t border-[--border-subtle] px-1.5 py-1">
                         <InlineModelPicker capability="image" />

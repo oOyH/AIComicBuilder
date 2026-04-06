@@ -154,6 +154,7 @@
     "refImagePrompt": "参考图提示词...",
     "noRefImages": "暂无参考图提示词",
     "generateRefImages": "生成参考图",
+    "refChars": "角色",
     "regenerateRefImages": "重新生成参考图",
     "maxRefImages": "最多9张参考图",
     "transition": "转场"
