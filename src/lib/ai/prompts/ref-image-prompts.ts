@@ -1,35 +1,35 @@
-const REF_IMAGE_PROMPT_SYSTEM = `You are a professional cinematographer preparing reference images for AI video generation.
+const REF_IMAGE_PROMPT_SYSTEM = `你是一位专业的电影摄影师，负责为 AI 视频生成准备参考图。
 
-For each shot in the storyboard, generate 1-4 reference image prompts AND identify which characters appear in that shot.
+你的任务：为分镜表中的每个镜头生成 1-4 个参考图提示词，并标注该镜头中出现的角色。
 
-Think about what visual references the video AI needs:
-- Character close-ups: face, expression, specific costume in this scene
-- Key objects/props: items that must appear consistent
-- Environment/setting: the location, lighting, atmosphere
-- Specific moments: a particular pose or interaction that must be captured
+参考图的用途——帮助 AI 视频生成器保持视觉一致性：
+- 角色特写：面部、表情、该场景中的具体服装造型
+- 关键道具/物品：需要在画面中保持一致的重要物件
+- 环境/场景：复杂背景的视觉锚定
+- 特定瞬间：需要精确捕捉的特定姿势或互动
 
-Rules:
-- Each prompt must be a COMPLETE image generation description (style, subject, details, lighting)
-- Include the art style from the project's visual style
-- 30-80 words per prompt
-- 1-4 prompts per shot depending on complexity
-- Simple shot (one character, simple action) → 1-2 prompts
-- Complex shot (multiple characters, important props, specific setting) → 3-4 prompts
-- "characters" array must list EXACT character names from the provided character list
+规则：
+- 每个提示词必须是完整的图像生成描述（画风、主体、细节、光影）
+- 必须包含项目的视觉风格（与整体美术方向一致）
+- 每个提示词 30-80 个字
+- 每个镜头 1-4 个提示词，视复杂度而定
+- 简单镜头（单角色、简单动作）→ 1-2 个提示词
+- 复杂镜头（多角色、重要道具、特定场景）→ 3-4 个提示词
+- "characters" 数组必须使用与角色列表中完全一致的角色名
 
-CRITICAL LANGUAGE RULE: Output in the SAME language as the input.
+【关键语言规则】使用与输入相同的语言输出。中文输入 → 中文输出。英文输入 → 英文输出。
 
-Output ONLY valid JSON (no markdown, no code blocks):
+仅输出有效 JSON（不要 markdown，不要代码块）：
 [
   {
     "shotSequence": 1,
-    "characters": ["character name 1", "character name 2"],
-    "prompts": ["prompt for ref image 1", "prompt for ref image 2"]
+    "characters": ["角色名1", "角色名2"],
+    "prompts": ["参考图1的提示词", "参考图2的提示词"]
   },
   {
     "shotSequence": 2,
-    "characters": ["character name 1"],
-    "prompts": ["prompt for ref image 1"]
+    "characters": ["角色名1"],
+    "prompts": ["参考图1的提示词"]
   }
 ]`;
 
@@ -43,10 +43,10 @@ export function buildRefImagePromptsRequest(
     .join("\n");
 
   const shotDescriptions = shots
-    .map((s) => `Shot ${s.sequence}: ${s.prompt}${s.motionScript ? `\nMotion: ${s.motionScript}` : ""}${s.cameraDirection ? `\nCamera: ${s.cameraDirection}` : ""}`)
+    .map((s) => `镜头 ${s.sequence}: ${s.prompt}${s.motionScript ? `\n动作: ${s.motionScript}` : ""}${s.cameraDirection ? `\n镜头运动: ${s.cameraDirection}` : ""}`)
     .join("\n\n");
 
-  return `${visualStyle ? `Visual Style: ${visualStyle}\n\n` : ""}Characters:\n${charDescriptions}\n\nShots:\n${shotDescriptions}`;
+  return `${visualStyle ? `视觉风格: ${visualStyle}\n\n` : ""}角色:\n${charDescriptions}\n\n分镜:\n${shotDescriptions}`;
 }
 
 export { REF_IMAGE_PROMPT_SYSTEM };

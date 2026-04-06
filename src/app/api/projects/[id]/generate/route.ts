@@ -329,14 +329,14 @@ async function handleScriptGenerate(
   }
 
   const outlineContext = outline
-    ? `\n\n【Story Outline - follow this structure strictly】\n${outline}\n\n`
+    ? `\n\n【故事大纲 - 请严格按照以下大纲结构展开剧本】\n${outline}\n\n`
     : "";
 
   // Fetch world setting from project
   let worldSettingContext = "";
   const [projForWorld] = await db.select({ worldSetting: projects.worldSetting }).from(projects).where(eq(projects.id, projectId));
   if (projForWorld?.worldSetting) {
-    worldSettingContext = `\n\n【World Setting】\n${projForWorld.worldSetting}\n\nThe script must be consistent with this world setting.\n\n`;
+    worldSettingContext = `\n\n【世界观设定】\n${projForWorld.worldSetting}\n\n剧本必须与此世界观设定保持一致。\n\n`;
   }
 
   const model = createLanguageModel(modelConfig.text);
@@ -805,12 +805,12 @@ async function handleShotSplitStream(
 
       // Inject world setting
       if (projData?.worldSetting) {
-        prompt = `【World Setting】\n${projData.worldSetting}\n\nAll shots must be consistent with this world setting.\n\n` + prompt;
+        prompt = `【世界观设定】\n${projData.worldSetting}\n\n所有镜头必须与此世界观设定保持一致。\n\n` + prompt;
       }
 
       // Inject target duration
       if (targetDuration && targetDuration > 0) {
-        prompt += `\n\nTarget total duration: ${targetDuration} seconds (${Math.floor(targetDuration / 60)}m${targetDuration % 60}s). Ensure all shot durations sum to approximately this target.\n`;
+        prompt += `\n\n目标总时长：${targetDuration}秒（${Math.floor(targetDuration / 60)}分${targetDuration % 60}秒）。请确保所有镜头的时长之和接近此目标。\n`;
       }
       try {
         const result = await generateText({
