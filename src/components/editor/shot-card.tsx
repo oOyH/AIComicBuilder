@@ -226,10 +226,13 @@ export function ShotCard({
   const imageGuard = useModelGuard("image");
   const videoGuard = useModelGuard("video");
 
-  // Parse multi-reference images
-  const parsedRefImages = useMemo(() => {
-    return parseRefImages(referenceImages);
-  }, [referenceImages]);
+  // Parse all items from referenceImages JSON
+  const allRefItems = useMemo(() => parseRefImages(referenceImages), [referenceImages]);
+  // Reference mode: only type=reference items
+  const parsedRefImages = useMemo(() => allRefItems.filter((r) => r.type === "reference"), [allRefItems]);
+  // Keyframe mode: first_frame and last_frame items
+  const firstFrameItem = useMemo(() => allRefItems.find((r) => r.type === "first_frame"), [allRefItems]);
+  const lastFrameItem = useMemo(() => allRefItems.find((r) => r.type === "last_frame"), [allRefItems]);
 
   // Derived state
   const hasText = !!(prompt || startFrameDesc || motionScript);
@@ -367,14 +370,22 @@ export function ShotCard({
   }
 
   // Save ref images array to shot
-  async function saveRefImages(updated: RefImage[]) {
+  // Save ref images — merges updated reference items back with frame items
+  async function saveRefImages(updatedRefItems: RefImage[]) {
+    const frameItems = allRefItems.filter((r) => r.type === "first_frame" || r.type === "last_frame");
+    await patchShot({ referenceImages: serializeRefImages([...frameItems, ...updatedRefItems]) });
+    onUpdate();
+  }
+
+  // Save all items (including frame items) — for when frame items are modified
+  async function saveAllItems(updated: RefImage[]) {
     await patchShot({ referenceImages: serializeRefImages(updated) });
     onUpdate();
   }
 
   // Add empty ref image card
   function handleAddRefImage() {
-    const updated = [...parsedRefImages, { id: genId(), prompt: "", status: "pending" as const }];
+    const updated = [...parsedRefImages, { id: genId(), type: "reference" as const, prompt: "", status: "pending" as const }];
     saveRefImages(updated);
   }
 
@@ -936,27 +947,41 @@ export function ShotCard({
                         className={`w-full resize-none border-0 bg-transparent px-2 py-1 text-[11px] leading-snug text-[--text-secondary] placeholder:text-[--text-muted] focus:outline-none`}
                       />
                     </div>
-                    {/* Character tags */}
-                    <div className="flex items-center gap-1 flex-wrap border-t border-[--border-subtle] px-2 py-1.5">
-                      <span className="text-[9px] text-[--text-muted] shrink-0">{t("shot.refChars")}:</span>
-                      {projectCharacters.map((char) => {
-                        // Detect if character is mentioned in this frame's prompt
-                        const framePrompt = isStart ? editStartFrame : editEndFrame;
-                        const isInPrompt = framePrompt?.includes(char.name);
-                        return (
-                          <span
-                            key={char.id}
-                            className={`rounded-full px-1.5 py-0.5 text-[9px] ${
-                              isInPrompt
-                                ? "bg-primary/10 text-primary border border-primary/30"
-                                : "bg-[--bg-muted] text-[--text-muted] border border-transparent"
-                            }`}
-                          >
-                            {char.name}
-                          </span>
-                        );
-                      })}
-                    </div>
+                    {/* Character tags — read from first_frame/last_frame item */}
+                    {(() => {
+                      const frameItem = isStart ? firstFrameItem : lastFrameItem;
+                      const currentChars = frameItem?.characters || [];
+                      return (
+                        <div className="flex items-center gap-1 flex-wrap border-t border-[--border-subtle] px-2 py-1.5">
+                          <span className="text-[9px] text-[--text-muted] shrink-0">{t("shot.refChars")}:</span>
+                          {projectCharacters.map((char) => {
+                            const isSelected = currentChars.includes(char.name);
+                            return (
+                              <button
+                                key={char.id}
+                                onClick={() => {
+                                  if (!frameItem) return;
+                                  const newChars = isSelected
+                                    ? currentChars.filter((n) => n !== char.name)
+                                    : [...currentChars, char.name];
+                                  const updated = allRefItems.map((r) =>
+                                    r.id === frameItem.id ? { ...r, characters: newChars } : r
+                                  );
+                                  saveAllItems(updated);
+                                }}
+                                className={`rounded-full px-1.5 py-0.5 text-[9px] transition-colors ${
+                                  isSelected
+                                    ? "bg-primary/10 text-primary border border-primary/30"
+                                    : "bg-[--bg-muted] text-[--text-muted] border border-transparent hover:border-[--border-subtle]"
+                                }`}
+                              >
+                                {char.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                     {/* Action bar */}
                     <div className="flex items-center gap-1 border-t border-[--border-subtle] px-1.5 py-1">
                       <button

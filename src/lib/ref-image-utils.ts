@@ -1,11 +1,14 @@
 import { id as genId } from "@/lib/id";
 
+export type RefImageType = "first_frame" | "last_frame" | "reference";
+
 export interface RefImage {
   id: string;
+  type: RefImageType;
   prompt: string;
   imagePath?: string;
   status: "pending" | "generated";
-  characters?: string[]; // character names that appear in this shot (set during ref prompt generation)
+  characters?: string[];
 }
 
 /**
@@ -23,12 +26,14 @@ export function parseRefImages(json: string | null | undefined): RefImage[] {
         if (item.startsWith("prompt:")) {
           return {
             id: genId(),
+            type: "reference" as const,
             prompt: item.replace(/^prompt:/, ""),
             status: "pending" as const,
           };
         }
         return {
           id: genId(),
+          type: "reference" as const,
           prompt: "",
           imagePath: item,
           status: "generated" as const,
@@ -38,6 +43,7 @@ export function parseRefImages(json: string | null | undefined): RefImage[] {
       const obj = item as Record<string, unknown>;
       return {
         id: (obj.id as string) || genId(),
+        type: (obj.type as RefImageType) || "reference",
         prompt: (obj.prompt as string) || "",
         imagePath: obj.imagePath as string | undefined,
         status: (obj.status as "pending" | "generated") || (obj.imagePath ? "generated" : "pending"),
@@ -54,4 +60,17 @@ export function parseRefImages(json: string | null | undefined): RefImage[] {
  */
 export function serializeRefImages(images: RefImage[]): string {
   return JSON.stringify(images);
+}
+
+/** Get only first_frame / last_frame items */
+export function getFrameItems(images: RefImage[]) {
+  return {
+    firstFrame: images.find((r) => r.type === "first_frame"),
+    lastFrame: images.find((r) => r.type === "last_frame"),
+  };
+}
+
+/** Get only reference items */
+export function getRefItems(images: RefImage[]): RefImage[] {
+  return images.filter((r) => r.type === "reference");
 }

@@ -902,15 +902,32 @@ async function handleShotSplitStream(
       depthOfField: shot.depthOfField || "medium",
       soundDesign: shot.soundDesign || "",
       musicCue: shot.musicCue || "",
-      referenceImages: JSON.stringify(
-        (Array.isArray(shot.referenceImagePrompts) ? shot.referenceImagePrompts : [])
+      referenceImages: JSON.stringify([
+        // First frame & last frame items (for keyframe mode)
+        {
+          id: genId(),
+          type: "first_frame",
+          prompt: shot.startFrame || "",
+          status: "pending",
+          characters: shot.characters || [],
+        },
+        {
+          id: genId(),
+          type: "last_frame",
+          prompt: shot.endFrame || "",
+          status: "pending",
+          characters: shot.characters || [],
+        },
+        // Reference image items (for reference mode)
+        ...(Array.isArray(shot.referenceImagePrompts) ? shot.referenceImagePrompts : [])
           .map((p: string) => ({
             id: genId(),
+            type: "reference",
             prompt: p,
             status: "pending",
             characters: shot.characters || [],
-          }))
-      ),
+          })),
+      ]),
       episodeId: episodeId ?? null,
     });
 
@@ -2818,6 +2835,7 @@ async function handleGenerateRefPrompts(
     const shotCharacters = entry.characters || [];
     const refImages: RefImage[] = entry.prompts.map((p) => ({
       id: genId(),
+      type: "reference" as const,
       prompt: p,
       status: "pending" as const,
       characters: shotCharacters,

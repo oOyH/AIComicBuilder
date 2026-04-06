@@ -124,13 +124,14 @@ export async function handleFrameGenerate(task: Task) {
     .set({ status: "generating" })
     .where(eq(shots.id, payload.shotId));
 
-  // Read pre-stored character names from referenceImages (set during shot-split)
+  // Read pre-stored character names from first_frame item in referenceImages
   const charsWithRefs = projectCharacters.filter((c) => !!c.referenceImage);
   let storedCharNames: string[] = [];
   try {
     const refImgs = JSON.parse((shot.referenceImages as string) || "[]");
-    if (Array.isArray(refImgs) && refImgs[0]?.characters) {
-      storedCharNames = refImgs[0].characters;
+    const firstFrameItem = Array.isArray(refImgs) ? refImgs.find((r: { type?: string }) => r.type === "first_frame") : null;
+    if (firstFrameItem?.characters) {
+      storedCharNames = firstFrameItem.characters;
     }
   } catch {}
 
