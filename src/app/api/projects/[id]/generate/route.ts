@@ -27,6 +27,7 @@ import { buildVideoPrompt, buildReferenceVideoPrompt } from "@/lib/ai/prompts/vi
 import { buildRefVideoPromptRequest } from "@/lib/ai/prompts/ref-video-prompt-generate";
 import { buildCharacterTurnaroundPrompt } from "@/lib/ai/prompts/character-image";
 import { assembleVideo } from "@/lib/video/ffmpeg";
+import { parseRefImages, serializeRefImages } from "@/lib/ref-image-utils";
 
 export const maxDuration = 300;
 
@@ -198,6 +199,14 @@ export async function POST(
 
   if (action === "video_assemble") {
     return handleVideoAssembleSync(projectId, payload, episodeId);
+  }
+
+  if (action === "batch_ref_image_generate") {
+    return handleBatchRefImageGenerate(projectId, userId, payload, modelConfig, episodeId);
+  }
+
+  if (action === "single_ref_image_generate") {
+    return handleSingleRefImageGenerate(projectId, userId, payload, modelConfig);
   }
 
   // Image/video generation - keep in task queue
@@ -2582,4 +2591,146 @@ ${instruction}
   });
 
   return NextResponse.json({ optimizedText: text.trim() });
+}
+
+// --- batch_ref_image_generate: generate all pending reference images across shots ---
+
+async function handleBatchRefImageGenerate(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig,
+  episodeId?: string
+) {
+  if (!modelConfig?.image) {
+    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
+  }
+
+  const batchVersionId = payload?.versionId as string | undefined;
+  const shotWhereConditions = [eq(shots.projectId, projectId)];
+  if (batchVersionId) shotWhereConditions.push(eq(shots.versionId, batchVersionId));
+  if (episodeId) shotWhereConditions.push(eq(shots.episodeId, episodeId));
+
+  const allShots = await db
+    .select()
+    .from(shots)
+    .where(and(...shotWhereConditions))
+    .orderBy(asc(shots.sequence));
+
+  const versionedUploadDir = batchVersionId
+    ? await getVersionedUploadDir(batchVersionId)
+    : process.env.UPLOAD_DIR || "./uploads";
+
+  // Get character references
+  const projectCharacters = await getEpisodeCharacters(projectId, episodeId);
+  const charRefs = projectCharacters
+    .filter((c) => !!c.referenceImage)
+    .map((c) => c.referenceImage as string);
+
+  const imageProvider = resolveImageProvider(modelConfig, versionedUploadDir);
+
+  const results: Array<{
+    shotId: string;
+    sequence: number;
+    generated: number;
+    failed: number;
+  }> = [];
+
+  for (const shot of allShots) {
+    const refImages = parseRefImages(shot.referenceImages as string);
+    const pending = refImages.filter((r) => r.status === "pending" && r.prompt.trim());
+
+    if (pending.length === 0) {
+      results.push({ shotId: shot.id, sequence: shot.sequence, generated: 0, failed: 0 });
+      continue;
+    }
+
+    let generated = 0;
+    let failed = 0;
+
+    for (const entry of pending) {
+      try {
+        const imagePath = await imageProvider.generateImage(entry.prompt, {
+          quality: "hd",
+          referenceImages: charRefs,
+        });
+        entry.imagePath = imagePath;
+        entry.status = "generated";
+        generated++;
+        console.log(`[BatchRefImage] Shot ${shot.sequence}: generated ref image "${entry.id}"`);
+      } catch (err) {
+        failed++;
+        console.warn(`[BatchRefImage] Shot ${shot.sequence}: failed ref image "${entry.id}":`, err);
+      }
+    }
+
+    // Save updated ref images back to shot
+    await db
+      .update(shots)
+      .set({ referenceImages: serializeRefImages(refImages) })
+      .where(eq(shots.id, shot.id));
+
+    results.push({ shotId: shot.id, sequence: shot.sequence, generated, failed });
+  }
+
+  return NextResponse.json({ results });
+}
+
+// --- single_ref_image_generate: generate or regenerate a single reference image ---
+
+async function handleSingleRefImageGenerate(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig
+) {
+  const shotId = payload?.shotId as string;
+  const refImageId = payload?.refImageId as string;
+
+  if (!shotId || !refImageId) {
+    return NextResponse.json({ error: "Missing shotId or refImageId" }, { status: 400 });
+  }
+  if (!modelConfig?.image) {
+    return NextResponse.json({ error: "No image model configured" }, { status: 400 });
+  }
+
+  const [shot] = await db.select().from(shots).where(eq(shots.id, shotId));
+  if (!shot) {
+    return NextResponse.json({ error: "Shot not found" }, { status: 404 });
+  }
+
+  const refImages = parseRefImages(shot.referenceImages as string);
+  const entry = refImages.find((r) => r.id === refImageId);
+  if (!entry) {
+    return NextResponse.json({ error: "Reference image not found" }, { status: 404 });
+  }
+  if (!entry.prompt.trim()) {
+    return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
+  }
+
+  // Get character references
+  const projectCharacters = await getEpisodeCharacters(projectId);
+  const charRefs = projectCharacters
+    .filter((c) => !!c.referenceImage)
+    .map((c) => c.referenceImage as string);
+
+  const imageProvider = resolveImageProvider(modelConfig);
+
+  try {
+    const imagePath = await imageProvider.generateImage(entry.prompt, {
+      quality: "hd",
+      referenceImages: charRefs,
+    });
+    entry.imagePath = imagePath;
+    entry.status = "generated";
+
+    await db
+      .update(shots)
+      .set({ referenceImages: serializeRefImages(refImages) })
+      .where(eq(shots.id, shotId));
+
+    return NextResponse.json({ ok: true, imagePath });
+  } catch (err) {
+    return NextResponse.json({ error: `Generation failed: ${err}` }, { status: 500 });
+  }
 }
